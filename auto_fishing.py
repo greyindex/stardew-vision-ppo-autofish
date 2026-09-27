@@ -149,7 +149,7 @@ class AutoFishingCycle:
         self.power_rect = None
         self.actor_rect = None
         self.watch_rect = None
-        self.idle = self.wait_pose = self.pose_mask = None
+        self.idle = self.wait_pose = self.pose_mask = self.wait_watch = None
         self.pose = None
         self.last_pose_time = 0.
         self.idle_since = self.changed_since = None
@@ -185,7 +185,7 @@ class AutoFishingCycle:
             self.last_visual_x = None
             self.pending_audio = None
             self.bite_times.clear()
-            self.wait_pose = self.pose_mask = None
+            self.wait_pose = self.pose_mask = self.wait_watch = None
         self.session._record({"type": "auto_state", "time": self.entered, "state": phase,
                               "cast": self.casts, "reason": why})
         self.session.note(f"[全自动 {self.casts}] {self.LABELS[phase]}：{why}")
@@ -197,7 +197,27 @@ class AutoFishingCycle:
         self.session.stop("全自动已停止：" + message)
 
     def should_scan(self):
-        return self.phase in ("settle", "wait", "hook_wait", "playing", "resolve")
+        # Ordinary rods cannot open a minigame until after our hook click.
+        # Avoid a continuous full-screen locator competing with bite detection.
+        return (self.phase in ("hook_wait", "playing", "resolve")
+                or (self.config.get("auto_bite") == "enchanted" and self.phase in ("settle", "wait")))
+
+    def panel_prior(self, client):
+        """Predict the minigame panel from the observed casting meter.
+
+        Independent recordings at different player locations have the same
+        meter-to-panel offset. A narrow rail match must still confirm the ROI.
+        """
+        if self.power_rect is None:
+            return None
+        scale = self.power_rect["height"] / 48.0
+        roi = {"left": round(self.power_rect["left"] - 152 * scale),
+               "top": round(self.power_rect["top"] - 146 * scale),
+               "width": round(188 * scale), "height": round(600 * scale)}
+        if (roi["left"] < 0 or roi["top"] < 0 or roi["left"] + roi["width"] > client["width"]
+                or roi["top"] + roi["height"] > client["height"]):
+            return None
+        return roi
 
     def panel_observed(self, present, valid=False):
         now = time.perf_counter()
@@ -233,7 +253,7 @@ class AutoFishingCycle:
             return
         self.idle = self.idle.copy()
         self.idle_watch = bounds(self.world, self.watch_rect).copy()
-        self.wait_pose = self.pose_mask = None
+        self.wait_pose = self.pose_mask = self.wait_watch = None
 
     def observe_pose(self, image, now):
         relative = {**self.actor_rect, "left": self.actor_rect["left"]-self.watch_rect["left"],
@@ -273,15 +293,23 @@ class AutoFishingCycle:
         if int(mask.sum()) < max(20, pose.shape[0]*pose.shape[1]*.01):
             return False
         self.wait_pose, self.pose_mask = pose.copy(), mask
+        if self.wait_watch is None:
+            self.wait_watch = watch.copy()
         self.idle_since = self.changed_since = None
         return True
 
     @staticmethod
     def yellow(image):
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-        return cv2.inRange(hsv, (18, 120, 145), (42, 255, 255))
+        # Daylight washes out saturation; night tint lowers value. The marker
+        # must also be new relative to the same scene, so this can stay broad.
+        return cv2.inRange(hsv, (10, 55, 55), (53, 255, 255))
 
     def bite_evidence(self, watch):
+        baseline = self.wait_watch if self.wait_watch is not None else self.idle_watch
+        difference = np.abs(watch.astype(np.int16) - baseline.astype(np.int16))
+        novel = difference.max(2) >= 18
+        novel_since_cast = np.abs(watch.astype(np.int16) - self.idle_watch.astype(np.int16)).max(2) >= 18
         mask = self.yellow(watch)
         # Only this actor's head area is searched, never a global ! template.
         # Quest/UI icons elsewhere on the screen cannot trigger this detector.
@@ -291,14 +319,16 @@ class AutoFishingCycle:
         ybottom = rect["top"] + 1.5*rect["height"] - self.watch_rect["top"]
         ys, xs = np.indices(mask.shape)
         mask[(np.abs(xs-cx) > .21*rect["width"]) | (ys < ytop) | (ys > ybottom)] = 0
-        # Keep full glyph geometry even where it overlaps yellow scenery. Check
-        # novelty separately against the pre-cast frame, not by erasing pixels.
-        difference = np.abs(watch.astype(np.float32) - self.idle_watch).mean(2)
+        # Remove stationary yellow scenery before connected components. On a
+        # bright day it otherwise joins the exclamation stem into a wide blob.
+        mask[~novel] = 0
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((2, 2), np.uint8))
         _, labels, stats, _ = cv2.connectedComponentsWithStats(mask)
         components = stats[1:]
         evidence = {"visible": False, "region": [max(0, round(cx-.21*rect["width"])),
                     max(0, round(ytop)), round(.42*rect["width"]), round(ybottom-ytop)],
-                    "stem_candidates": 0, "novel_fraction": 0.}
+                    "stem_candidates": 0, "novel_fraction": 0.,
+                    "baseline": "wait" if self.wait_watch is not None else "pre_cast"}
         for i, (x, y, w, h, area) in enumerate(components, 1):
             if not (2.0 <= h/max(w, 1) <= 8 and .22*rect["height"] <= h <= 1.4*rect["height"] and area >= w*h*.45):
                 continue
@@ -306,12 +336,12 @@ class AutoFishingCycle:
             for j, (xx, yy, ww, hh, aa) in enumerate(components, 1):
                 if (y+h <= yy <= y+h+max(4, w*2.5) and abs(xx+ww/2-(x+w/2)) <= max(3, w)
                         and .45*w <= ww <= 2*w and .45*w <= hh <= 1.8*w and aa >= 3):
-                    novel = min(float((difference[labels == i] > 28).mean()),
-                                float((difference[labels == j] > 28).mean()))
-                    if novel < .60:
+                    novel_fraction = min(float(novel_since_cast[labels == i].mean()),
+                                         float(novel_since_cast[labels == j].mean()))
+                    if novel_fraction < .60:
                         continue
                     evidence.update(visible=True, stem=list(map(int, (x,y,w,h))),
-                                    dot=list(map(int, (xx,yy,ww,hh))), novel_fraction=novel)
+                                    dot=list(map(int, (xx,yy,ww,hh))), novel_fraction=novel_fraction)
                     return evidence
         return evidence
 

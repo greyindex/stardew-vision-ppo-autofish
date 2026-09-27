@@ -273,6 +273,10 @@ class PanelMatcher:
         from fishing_vision.inference import PanelLocator
         self.coarse = PanelLocator(assets / "fishing_menu.png")
         self.menu, self.mask = self.coarse.menu, self.coarse.mask
+        self.fish_sprite = cv2.imread(str(assets / "fish.png"), cv2.IMREAD_UNCHANGED)
+        if self.fish_sprite is None or self.fish_sprite.shape[2] != 4:
+            raise FileNotFoundError(assets / "fish.png")
+        self.fish_sizes = {}
         self.reference = self.menu[self.mask > 0].astype(np.float32).ravel()
         self.reference_norm = np.linalg.norm(self.reference)
         rgba = cv2.imread(str(assets / "fishing_menu.png"), cv2.IMREAD_UNCHANGED)
@@ -328,6 +332,44 @@ class PanelMatcher:
         thumbnail = cv2.resize(crop, (94, 300), interpolation=cv2.INTER_AREA)
         values = thumbnail[self.mask > 0].astype(np.float32).ravel()
         return float(np.dot(values, self.reference) / max(np.linalg.norm(values) * self.reference_norm, 1e-8))
+
+    def locate_near(self, patch, size):
+        """Confirm an actor-relative panel guess within a few rendered pixels."""
+        width, height = size
+        if patch.shape[1] < width or patch.shape[0] < height:
+            return None
+        template = cv2.resize(self.menu, size, interpolation=cv2.INTER_NEAREST)
+        mask = cv2.resize(self.mask, size, interpolation=cv2.INTER_NEAREST)
+        scores = cv2.matchTemplate(patch, template, cv2.TM_CCORR_NORMED, mask=mask)
+        scores = np.nan_to_num(scores, nan=-1., posinf=-1., neginf=-1.)
+        _, score, _, xy = cv2.minMaxLoc(scores)
+        return xy if score >= .965 else None
+
+    def fish_sprite_center(self, crop):
+        """Independent normal-fish location for CNN/treasure ambiguity.
+
+        Only opaque sprite pixels participate, and x is restricted to the fish
+        lane. Legendary icons are left to the CNN when this match is weak.
+        """
+        h, w = crop.shape[:2]
+        key = (w, h)
+        if key not in self.fish_sizes:
+            if len(self.fish_sizes) >= 12:
+                self.fish_sizes.clear()
+            size = (max(4, round(19*w/94)), max(4, round(19*h/300)))
+            sprite = cv2.resize(self.fish_sprite[:, :, :3], size, interpolation=cv2.INTER_NEAREST)
+            alpha = cv2.resize(self.fish_sprite[:, :, 3], size, interpolation=cv2.INTER_NEAREST)
+            self.fish_sizes[key] = (sprite, alpha)
+        sprite, alpha = self.fish_sizes[key]
+        x0 = max(0, round(27*w/94))
+        x1 = min(w, round(40*w/94) + sprite.shape[1])
+        if x1-x0 < sprite.shape[1] or h < sprite.shape[0]:
+            return None, 0.
+        scores = cv2.matchTemplate(crop[:, x0:x1], sprite, cv2.TM_CCORR_NORMED, mask=alpha)
+        scores = np.nan_to_num(scores, nan=-1., posinf=-1., neginf=-1.)
+        _, score, _, xy = cv2.minMaxLoc(scores)
+        # The CNN's renderer label is sprite top + 10 native pixels.
+        return (xy[1] + sprite.shape[0]/2) * 300/h + .5, float(score)
 
 
 class FramePacer:
@@ -412,7 +454,8 @@ class BackgroundPanelSearch:
                     self.busy = False
 
 
-def decode_geometry(prediction, crop, structure, offset, heights):
+def decode_geometry(prediction, crop, structure, offset, heights,
+                    sprite_center=None, sprite_score=0., last_fish_center=None):
     """Validate CNN geometry with its semantic mask; no HSV fallback.
 
     Low bar presence scores are shown/logged, but independent spatial evidence
@@ -422,28 +465,44 @@ def decode_geometry(prediction, crop, structure, offset, heights):
     scale, tx, ty = prediction["transform"]
     native = {key: float(value * 300 / h) for key, value in prediction["rows"].items()}
     scores = prediction["presence_scores"]
-    geometry = {"fish_center": native["fish_visual_center"] + offset,
+    sprite_valid = sprite_center is not None and sprite_score >= .94 and 5 <= sprite_center <= 285
+    use_sprite = sprite_valid and (abs(sprite_center-native["fish_visual_center"]) >= 2
+                                   or scores["fish"] < .7)
+    fish_center = sprite_center if use_sprite else native["fish_visual_center"]
+    geometry = {"fish_center": fish_center + offset,
                 "bar_top": native["bar_top"], "bar_bottom": native["bar_bottom"],
                 "progress": float(np.clip((292 - native["progress_top"]) / 288, 0, 1))}
     mask = prediction["mask"]
     nx = np.broadcast_to(((np.arange(mask.shape[1], dtype=np.float32) - tx) / scale * 94 / w)[None], mask.shape)
     ny = np.broadcast_to(((np.arange(mask.shape[0], dtype=np.float32) - ty) / scale * 300 / h)[:, None], mask.shape)
-    fish = (mask == 1) | (mask == 2)
-    bar, progress = mask == 3, mask == 4
+    legendary = mask == 2
+    fish = (mask == 1) | legendary
+    bar, progress, treasure = mask == 3, mask == 4, mask == 5
     units = (94 / w / scale) * (300 / h / scale)
+    treasure_y = float(np.median(ny[treasure])) if treasure.any() else None
+    treasure_near_fish = (treasure_y is not None and treasure.sum()*units >= 15 and
+                          (abs(treasure_y - native["fish_visual_center"]) <= 24 or
+                           (last_fish_center is not None and abs(treasure_y - last_fish_center) <= 24)))
     evidence = {"fish_area_native": float(fish.sum() * units), "bar_area_native": float(bar.sum() * units),
-                "progress_area_native": float(progress.sum() * units), "structural_score": structure}
+                "progress_area_native": float(progress.sum() * units), "structural_score": structure,
+                "legendary_area_native": float(legendary.sum() * units),
+                "treasure_area_native": float(treasure.sum() * units),
+                "treasure_center_native": treasure_y, "treasure_near_fish": bool(treasure_near_fish),
+                "fish_template_score": sprite_score,
+                "fish_source": "sprite" if use_sprite else "cnn"}
     reason = ""
     length = geometry["bar_bottom"] - geometry["bar_top"]
     if structure < .965 or scores["panel"] < .85:
         reason = "未确认完整钓鱼面板"
-    elif scores["fish"] < .7 or evidence["fish_area_native"] < 15:
+    elif treasure_near_fish and not sprite_valid and evidence["legendary_area_native"] < 15:
+        reason = "宝箱遮挡鱼图标"
+    elif not sprite_valid and (scores["fish"] < .7 or evidence["fish_area_native"] < 15):
         reason = "鱼图标不可见或分割不足"
-    elif np.mean((nx[fish] >= 28) & (nx[fish] <= 56)) < .85:
+    elif not sprite_valid and np.mean((nx[fish] >= 28) & (nx[fish] <= 56)) < .85:
         reason = "鱼图标不在钓鱼轨道"
-    elif not 5 <= native["fish_visual_center"] <= 285:
+    elif not 5 <= fish_center <= 285:
         reason = "鱼坐标异常或处于开关动画"
-    elif abs(float(np.median(ny[fish])) - native["fish_visual_center"]) > 7:
+    elif not sprite_valid and abs(float(np.median(ny[fish])) - native["fish_visual_center"]) > 7:
         reason = "鱼热图与分割位置不一致"
     elif not (32 <= length <= 151 and 2 <= geometry["bar_top"] and geometry["bar_bottom"] <= 292):
         reason = "绿条边界异常或处于开关动画"
@@ -659,6 +718,7 @@ class VisionSession:
             self.model_info = {"vision_step": self.vision.step, "ppo_steps": int(self.policy.model.num_timesteps),
                                "gpu": torch.cuda.get_device_name(), "torch": str(torch.__version__),
                                "vision_preprocessing": "raw-rails-gated-canonical-outer-context-v1",
+                               "runtime_adapter": "actor-prior-daynight-bite-fish-sprite-v2",
                                "vision_sha256": hashlib.sha256(absolute(self.config["vision_model"]).read_bytes()).hexdigest(),
                                "ppo_sha256": hashlib.sha256(absolute(self.config["ppo_model"]).read_bytes()).hexdigest()}
             self.ready.set()
@@ -668,6 +728,8 @@ class VisionSession:
                              "async_panel_locator", "actor_bite_confirmation", "per_thread_audio_com",
                              "real_game_geometry_calibration_v1", "canonical_outer_context_v1",
                              "panel_presence_episode_tracking"],
+                "runtime_refinements": ["actor_panel_prior_v1", "day_night_bite_delta_v1",
+                                        "normal_fish_sprite_crosscheck_v1", "treasure_occlusion_hold_120ms"],
                 "cast_hold_seconds": CAST_HOLD_SECONDS,
                 "geometry_calibration": {"fish_offset_native": self.config["fish_offset_native"],
                                          "level": self.config["level"]},
@@ -702,6 +764,7 @@ class VisionSession:
         pacer = FramePacer(30)
         panel_hint, next_hint, previous_capture = None, 0., None
         last_panel_seen = 0.
+        last_fish = None
         while not self.shutdown.is_set():
             self._drain_inputs()
             if self.diagnostic_request.is_set():
@@ -734,6 +797,7 @@ class VisionSession:
                 heights.clear(); periods.clear()
                 previous_capture = None
                 last_panel_seen = 0.
+                last_fish = None
                 self.publish(hz=0., bite_hz=0., bite_visual_frames=0, bite_audio=None)
                 with self.ring_lock:
                     self.ring.clear()
@@ -752,6 +816,7 @@ class VisionSession:
                     self.policy.reset(cfg)
                 inside, confirmed, roi = False, 0, None
                 last_panel_seen = 0.
+                last_fish = None
                 heights.clear(); periods.clear()
                 self.publish(status="请切回星露谷游戏窗口" if hwnd else "等待星露谷游戏打开", holding=False, focused=False)
                 pacer.reset()
@@ -773,6 +838,7 @@ class VisionSession:
                 previous_client = client
                 panel_hint, next_hint, previous_capture = None, 0., None
                 last_panel_seen = 0.
+                last_fish = None
                 periods.clear()
             if self.autocycle:
                 self.autocycle.tick(sct, client, hwnd)
@@ -793,8 +859,25 @@ class VisionSession:
                 else:
                     if not self.autocycle:
                         self.publish(status="寻找钓鱼面板 · 请手动抛竿和上钩", focused=True, holding=False)
+                    # The casting gauge gives an actor-relative panel position.
+                    # A small masked rail search is faster than the first global
+                    # multi-scale scan; geometry still validates the CNN result.
+                    prior = self.autocycle.panel_prior(client) if self.autocycle else None
+                    if prior:
+                        pad = max(4, round(prior["height"] / 75))
+                        x0, y0 = max(0, prior["left"]-pad), max(0, prior["top"]-pad)
+                        x1 = min(client["width"], prior["left"]+prior["width"]+pad)
+                        y1 = min(client["height"], prior["top"]+prior["height"]+pad)
+                        search = {"left": client["left"]+x0, "top": client["top"]+y0,
+                                  "width": x1-x0, "height": y1-y0}
+                        patch, _ = self._capture(sct, search)
+                        found = self.matcher.locate_near(patch, (prior["width"], prior["height"]))
+                        if found is not None:
+                            roi = {"left": x0+found[0], "top": y0+found[1],
+                                   "width": prior["width"], "height": prior["height"]}
+                            roi_source = "actor_panel_prior"
                     search_key = (generation, hwnd, *[client[k] for k in ("left", "top", "width", "height")])
-                    result = self.panel_search.poll(search_key)
+                    result = self.panel_search.poll(search_key) if roi is None else None
                     if result is not None:
                         roi, locator_ms = result["roi"], result["locator_ms"]
                         roi_source = "background_locator"
@@ -835,8 +918,11 @@ class VisionSession:
             context_end = time.perf_counter()
             predicted = self.vision.predict([prepared])[0]
             inference_end = time.perf_counter()
+            sprite_center, sprite_score = self.matcher.fish_sprite_center(crop)
             geometry, native, evidence, reason = decode_geometry(predicted, crop, structure,
-                                                  float(cfg["fish_offset_native"]), heights)
+                                                  float(cfg["fish_offset_native"]), heights,
+                                                  sprite_center, sprite_score,
+                                                  last_fish[1] if last_fish and captured-last_fish[0] <= .15 else None)
             decode_end = time.perf_counter()
             vision_ms = (time.perf_counter() - t0) * 1000
             capture_ms = (capture_end - capture_start) * 1000
@@ -855,12 +941,13 @@ class VisionSession:
                 last_panel_seen = captured
             if self.autocycle:
                 self.autocycle.panel_observed(panel_present, valid=not bool(reason))
-            request, applied, ppo_ms = False, False, 0.
+            request, applied, ppo_ms, occlusion_hold = False, False, 0., False
             if not reason:
                 last_good = captured
+                last_fish = (captured, geometry["fish_center"] - float(cfg["fish_offset_native"]))
                 heights.append(geometry["bar_bottom"] - geometry["bar_top"])
                 confirmed += 1
-                if confirmed >= 3 and not inside:
+                if confirmed >= (1 if self.autocycle else 2) and not inside:
                     inside = True
                     panel_hint = {key: roi[key] for key in ("left", "top", "width", "height")}
                     episode += 1
@@ -888,14 +975,19 @@ class VisionSession:
                         self.policy.applied(applied, time.perf_counter())
             else:
                 confirmed = 0
-                self.mouse.release()
+                occlusion_hold = bool(reason == "宝箱遮挡鱼图标" and inside
+                                      and captured-last_good <= .12 and cfg["mode"] == "control")
+                if occlusion_hold:
+                    applied = self.mouse.set(self.mouse.holding, hwnd)
+                else:
+                    self.mouse.release()
                 if cfg["mode"] == "control":
-                    self.policy.applied(False, time.perf_counter())
+                    self.policy.applied(applied, time.perf_counter())
             input_done = time.perf_counter()
             self._drain_inputs()
             now = time.perf_counter()
-            # Losing geometry still releases input, but a visible panel is the
-            # same fight. Do not repeatedly reset episode identity/time origin.
+            # A visible panel is the same fight across brief geometry gaps.
+            # Do not repeatedly reset episode identity/time origin.
             # Unconfirmed candidate ROIs must still time out and be re-searched.
             if now - last_good > .6 and (not inside or now - last_panel_seen > .6):
                 if inside:
@@ -904,13 +996,19 @@ class VisionSession:
                 inside, confirmed = False, 0
                 self.policy.reset(cfg)
                 heights.clear()
+                last_fish = None
+                roi = None
+            elif (not inside and roi_source in ("actor_panel_prior", "background_locator", "previous_panel_location")
+                  and predicted["presence_scores"]["panel"] < .5):
+                # A rail-like world texture is only a proposal. Re-scan on the
+                # next frame instead of staying on it for the full timeout.
                 roi = None
             periods.append(captured)
             hz = (len(periods) - 1) / max(periods[-1] - periods[0], 1e-6) if len(periods) > 1 else 0.
             if reason:
-                status = reason + " · 已松开"
+                status = reason + (" · 短暂保持上一输入" if occlusion_hold else " · 已松开")
             elif not inside:
-                status = f"正在确认完整观测 {confirmed}/3"
+                status = f"正在确认完整观测 {confirmed}/{1 if self.autocycle else 2}"
             else:
                 status = ("PPO 控制中" if cfg["mode"] == "control" else "只观察 · 不发送输入")
                 if predicted["presence_scores"]["bar"] < .7:
@@ -921,7 +1019,8 @@ class VisionSession:
                       "screen_roi": screen_roi, "native_rows": native, "geometry": geometry,
                       "presence_scores": predicted["presence_scores"], "evidence": evidence,
                       "reason": reason, "active_minigame": inside, "requested_action": int(request),
-                      "applied_action": int(applied), "mode": cfg["mode"], "level": self.policy.level,
+                      "applied_action": int(applied), "occlusion_hold": occlusion_hold,
+                      "mode": cfg["mode"], "level": self.policy.level,
                       "capture_ms": capture_ms, "cnn_ms": cnn_ms, "geometry_ms": geometry_ms,
                       "context_ms": context_ms, "canonical_context": prepared is not crop,
                       "panel_present": panel_present,

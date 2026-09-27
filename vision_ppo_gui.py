@@ -489,8 +489,12 @@ class VisionGUI:
                                  f"CNN {state.get('cnn_ms', 0):.1f} · PPO {state.get('ppo_ms', 0):.1f} ms"
                                  f" · 图像到输入 {state.get('age_ms', 0):.1f} ms")
             p = state.get("scores", {})
+            evidence = state.get("evidence", {})
+            fish_source = "鱼图标素材" if evidence.get("fish_source") == "sprite" else "CNN"
             self.score_text.set(f"存在分数：面板 {p.get('panel', 0):.2f}　鱼 {p.get('fish', 0):.2f}　"
-                                f"绿条 {p.get('bar', 0):.2f}　进度 {p.get('progress', 0):.2f}\n分数未经校准；同时检查分割与几何一致性。")
+                                 f"绿条 {p.get('bar', 0):.2f}　进度 {p.get('progress', 0):.2f}\n"
+                                 f"鱼定位：{fish_source} · 素材匹配 {evidence.get('fish_template_score', 0):.2f}"
+                                 f" · 宝箱遮挡 {'是' if evidence.get('treasure_near_fish') else '否'}")
         if full_auto and state.get("auto_phase") in ("settle", "wait"):
             self.timing_text.set(f"头顶检测：实测 {state.get('bite_hz', 0):.1f} / 目标 30 Hz\n"
                                  "提竿需要头顶新出现的 !；声音可辅助确认。")

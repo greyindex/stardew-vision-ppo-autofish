@@ -45,6 +45,7 @@ def main():
         ROOT / "training/runs/20260927_scaling_10m/best.zip",
         ROOT / "training/runs/20260927_scaling_10m/manifest.json",
         ROOT / "training/vision_data/assets/fishing_menu.png",
+        ROOT / "training/vision_data/assets/fish.png",
         ROOT / "auto_assets/power_meter.png",
         ROOT / "auto_assets/energy_meter.png",
     ]
