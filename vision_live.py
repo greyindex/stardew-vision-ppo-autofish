@@ -718,7 +718,7 @@ class VisionSession:
             self.model_info = {"vision_step": self.vision.step, "ppo_steps": int(self.policy.model.num_timesteps),
                                "gpu": torch.cuda.get_device_name(), "torch": str(torch.__version__),
                                "vision_preprocessing": "raw-rails-gated-canonical-outer-context-v1",
-                               "runtime_adapter": "f1-start-layout-energy-v3",
+                               "runtime_adapter": "daylight-cast-bite-v4",
                                "vision_sha256": hashlib.sha256(absolute(self.config["vision_model"]).read_bytes()).hexdigest(),
                                "ppo_sha256": hashlib.sha256(absolute(self.config["ppo_model"]).read_bytes()).hexdigest()}
             self.ready.set()
@@ -730,7 +730,8 @@ class VisionSession:
                              "panel_presence_episode_tracking"],
                 "runtime_refinements": ["actor_panel_prior_v1", "day_night_bite_delta_v1",
                                         "normal_fish_sprite_crosscheck_v1", "treasure_occlusion_hold_120ms",
-                                        "start_panel_layout_guard_v1", "validated_energy_confirmation_v1"],
+                                        "start_panel_layout_guard_v1", "validated_energy_confirmation_v1",
+                                        "cast_meter_contrast_v1", "bite_adaptive_core_v1"],
                 "cast_hold_seconds": CAST_HOLD_SECONDS,
                 "geometry_calibration": {"fish_offset_native": self.config["fish_offset_native"],
                                          "level": self.config["level"]},

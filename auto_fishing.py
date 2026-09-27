@@ -22,8 +22,11 @@ def bounds(frame, rect):
 
 
 def correlation(image, reference, mask):
+    """Masked edge contrast, independent of the template's rain/lighting tint."""
     image = cv2.resize(image, (reference.shape[1], reference.shape[0]), interpolation=cv2.INTER_AREA)
-    a, b = image[mask > 0].astype(np.float32).ravel(), reference[mask > 0].astype(np.float32).ravel()
+    a = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)[mask > 0].astype(np.float32)
+    b = cv2.cvtColor(reference, cv2.COLOR_BGR2GRAY)[mask > 0].astype(np.float32)
+    a -= a.mean(); b -= b.mean()
     return float(np.dot(a, b) / max(np.linalg.norm(a) * np.linalg.norm(b), 1e-8))
 
 
@@ -45,19 +48,35 @@ class GaugeReader:
         self.energy_mask[218:223, 7:39] = 255
 
     @staticmethod
-    def locate(image, template, mask, scales, threshold, max_width, validator=None):
+    def locate(image, template, mask, scales, threshold, max_width, validator=None,
+               *, structural=False, baseline=None):
         shrink = min(1., max_width / image.shape[1])
         small = cv2.resize(image, None, fx=shrink, fy=shrink, interpolation=cv2.INTER_AREA)
+        changes = None
+        if baseline is not None:
+            before = cv2.resize(baseline, (small.shape[1], small.shape[0]), interpolation=cv2.INTER_AREA)
+            changes = cv2.integral(np.abs(small.astype(np.float32)-before).mean(2))
+        if structural:
+            small = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+        method = cv2.TM_CCOEFF_NORMED if structural else cv2.TM_CCORR_NORMED
         candidates = []
         for scale in scales:
             w, h = round(template.shape[1] * scale * shrink), round(template.shape[0] * scale * shrink)
             if min(w, h) < 8 or w > small.shape[1] or h > small.shape[0]:
                 continue
             reference = cv2.resize(template, (w, h), interpolation=cv2.INTER_AREA)
+            if structural:
+                reference = cv2.cvtColor(reference, cv2.COLOR_BGR2GRAY)
             selected = cv2.resize(mask, (w, h), interpolation=cv2.INTER_NEAREST)
-            values = cv2.matchTemplate(small, reference, cv2.TM_CCORR_NORMED, mask=selected)
+            values = cv2.matchTemplate(small, reference, method, mask=selected)
             values = np.nan_to_num(values, nan=-1., posinf=-1., neginf=-1.)
-            for _ in range(3 if validator else 1):
+            if changes is not None:
+                novelty = (changes[h:, w:] - changes[:-h, w:] - changes[h:, :-w] + changes[:-h, :-w]) / (w*h)
+                values[novelty < 8] = -1
+            # A changing toolbar can outrank a small cast meter after coarse
+            # downsampling. Keep enough distinct proposals for native checks.
+            proposals = 24 if structural and validator else 3 if validator else 1
+            for _ in range(proposals):
                 _, score, _, xy = cv2.minMaxLoc(values)
                 if score < threshold:
                     break
@@ -75,12 +94,17 @@ class GaugeReader:
             size = best["width"], best["height"]
             if patch.shape[0] < size[1] or patch.shape[1] < size[0]:
                 continue
-            values = cv2.matchTemplate(patch, cv2.resize(template, size, interpolation=cv2.INTER_NEAREST),
-                cv2.TM_CCORR_NORMED, mask=cv2.resize(mask, size, interpolation=cv2.INTER_NEAREST))
+            reference = cv2.resize(template, size, interpolation=cv2.INTER_AREA if structural else cv2.INTER_NEAREST)
+            if structural:
+                patch = cv2.cvtColor(patch, cv2.COLOR_BGR2GRAY)
+                reference = cv2.cvtColor(reference, cv2.COLOR_BGR2GRAY)
+            values = cv2.matchTemplate(patch, reference, method,
+                                      mask=cv2.resize(mask, size, interpolation=cv2.INTER_NEAREST))
             values = np.nan_to_num(values, nan=-1., posinf=-1., neginf=-1.)
             _, score, _, xy = cv2.minMaxLoc(values)
             best.update(left=x0+xy[0], top=y0+xy[1], score=float(score))
-            if score >= threshold and (validator is None or validator(best)):
+            fine_threshold = max(threshold, .88) if structural else threshold
+            if score >= fine_threshold and (validator is None or validator(best)):
                 return best
         return None
 
@@ -91,7 +115,8 @@ class GaugeReader:
                     and np.abs(current.astype(np.float32)-previous).mean() >= 8
                     and self.power_fill(current) is not None)
         rect = self.locate(frame, self.power, self.power_mask,
-                           (.5, .625, .75, .875, 1., 1.125, 1.25, 1.5, 2.), .965, 960, is_new_meter)
+                           (.5, .625, .75, .875, 1., 1.125, 1.25, 1.5, 2.), .80, 1280, is_new_meter,
+                           structural=True, baseline=baseline)
         if rect is None:
             return None
         current, previous = bounds(frame, rect), bounds(baseline, rect)
@@ -101,7 +126,7 @@ class GaugeReader:
         return (rect, fill) if fill is not None else None
 
     def power_fill(self, crop):
-        if correlation(crop, self.power, self.power_mask) < .965:
+        if correlation(crop, self.power, self.power_mask) < .85:
             return None
         image = cv2.resize(crop, (185, 48), interpolation=cv2.INTER_AREA)
         hsv = cv2.cvtColor(image[12:36, 10:175], cv2.COLOR_BGR2HSV)
@@ -335,6 +360,31 @@ class AutoFishingCycle:
         # must also be new relative to the same scene, so this can stay broad.
         return cv2.inRange(hsv, (10, 55, 55), (53, 255, 255))
 
+    @staticmethod
+    def marker_core(image, mask, meter_height):
+        """Separate a bright ! from its brown outline under local lighting.
+
+        In daylight both the outline and the fill fall inside the broad gold
+        hue range. Split only tall, marker-sized components; keep the original
+        mask as the first detection path for dim or already-separated markers.
+        """
+        value = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)[:, :, 2]
+        _, labels, stats, _ = cv2.connectedComponentsWithStats(mask)
+        core = mask.copy()
+        for label, (x, y, w, h, area) in enumerate(stats[1:], 1):
+            if not (1.7 <= h/max(w, 1) <= 8 and .4*meter_height <= h <= 1.8*meter_height
+                    and area >= 12):
+                continue
+            selected = labels[y:y+h, x:x+w] == label
+            patch = value[y:y+h, x:x+w]
+            levels = patch[selected]
+            low, high = np.percentile(levels, (20, 90))
+            if high-low < 30:
+                continue
+            threshold, _ = cv2.threshold(levels, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            core[y:y+h, x:x+w][selected & (patch <= threshold)] = 0
+        return core
+
     def bite_evidence(self, watch):
         baseline = self.wait_watch if self.wait_watch is not None else self.idle_watch
         difference = np.abs(watch.astype(np.int16) - baseline.astype(np.int16))
@@ -352,27 +402,30 @@ class AutoFishingCycle:
         # Remove stationary yellow scenery before connected components. On a
         # bright day it otherwise joins the exclamation stem into a wide blob.
         mask[~novel] = 0
-        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((2, 2), np.uint8))
-        _, labels, stats, _ = cv2.connectedComponentsWithStats(mask)
-        components = stats[1:]
         evidence = {"visible": False, "region": [max(0, round(cx-.21*rect["width"])),
                     max(0, round(ytop)), round(.42*rect["width"]), round(ybottom-ytop)],
                     "stem_candidates": 0, "novel_fraction": 0.,
                     "baseline": "wait" if self.wait_watch is not None else "pre_cast"}
-        for i, (x, y, w, h, area) in enumerate(components, 1):
-            if not (2.0 <= h/max(w, 1) <= 8 and .22*rect["height"] <= h <= 1.4*rect["height"] and area >= w*h*.45):
-                continue
-            evidence["stem_candidates"] += 1
-            for j, (xx, yy, ww, hh, aa) in enumerate(components, 1):
-                if (y+h <= yy <= y+h+max(4, w*2.5) and abs(xx+ww/2-(x+w/2)) <= max(3, w)
-                        and .45*w <= ww <= 2*w and .45*w <= hh <= 1.8*w and aa >= 3):
-                    novel_fraction = min(float(novel_since_cast[labels == i].mean()),
-                                         float(novel_since_cast[labels == j].mean()))
-                    if novel_fraction < .60:
-                        continue
-                    evidence.update(visible=True, stem=list(map(int, (x,y,w,h))),
-                                    dot=list(map(int, (xx,yy,ww,hh))), novel_fraction=novel_fraction)
-                    return evidence
+        for mode in ("gold", "bright_core"):
+            selected_mask = mask if mode == "gold" else self.marker_core(watch, mask, rect["height"])
+            selected_mask = cv2.morphologyEx(selected_mask, cv2.MORPH_CLOSE, np.ones((2, 2), np.uint8))
+            _, labels, stats, _ = cv2.connectedComponentsWithStats(selected_mask)
+            components = stats[1:]
+            for i, (x, y, w, h, area) in enumerate(components, 1):
+                if not (2.0 <= h/max(w, 1) <= 8 and .22*rect["height"] <= h <= 1.4*rect["height"] and area >= w*h*.45):
+                    continue
+                evidence["stem_candidates"] += 1
+                for j, (xx, yy, ww, hh, aa) in enumerate(components, 1):
+                    if (y+h <= yy <= y+h+max(4, w*2.5) and abs(xx+ww/2-(x+w/2)) <= max(3, w)
+                            and .45*w <= ww <= 2*w and .45*w <= hh <= 1.8*w and aa >= 3):
+                        novel_fraction = min(float(novel_since_cast[labels == i].mean()),
+                                             float(novel_since_cast[labels == j].mean()))
+                        if novel_fraction < .60:
+                            continue
+                        evidence.update(visible=True, stem=list(map(int, (x,y,w,h))),
+                                        dot=list(map(int, (xx,yy,ww,hh))), novel_fraction=novel_fraction,
+                                        mask_mode=mode)
+                        return evidence
         return evidence
 
     def poll_bite(self, watch, hwnd):
@@ -451,7 +504,7 @@ class AutoFishingCycle:
         if released.get("reason") != "cast_duration_complete":
             self.fail("蓄力输入已被中断")
         elif self.actor_rect is None:
-            self.fail("已按 1.05 秒松开，但未定位玩家；请检查界面缩放")
+            self.fail("已按 1.05 秒松开，但未识别到蓄力条，无法定位玩家")
         else:
             self.transition("settle", f"计划 {CAST_HOLD_SECONDS:.2f} 秒，实际按住 {released['held_seconds']:.3f} 秒")
         return True
@@ -506,6 +559,10 @@ class AutoFishingCycle:
                 if located:
                     self.power_rect, _ = located
                     self.calibrate_actor(self.power_rect)
+                    self.session._record({"type": "auto_player_located", "time": time.perf_counter(),
+                                          "cast": self.casts, "power_rect": dict(self.power_rect),
+                                          "actor_rect": dict(self.actor_rect), "watch_rect": dict(self.watch_rect),
+                                          "cast_elapsed": time.perf_counter()-self.cast_started})
             if not self.session.active.is_set() or self.generation != self.session.generation:
                 return
             self.finish_cast_if_released()
