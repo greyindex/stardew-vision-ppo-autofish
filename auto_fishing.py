@@ -258,10 +258,10 @@ class AutoFishingCycle:
                 or (self.config.get("auto_bite") == "enchanted" and self.phase in ("settle", "wait")))
 
     def panel_prior(self, client):
-        """Predict the minigame panel from the observed casting meter.
+        """Estimate the minigame panel from the observed casting meter.
 
-        Independent recordings at different player locations have the same
-        meter-to-panel offset. A narrow rail match must still confirm the ROI.
+        World zoom changes the meter-to-panel offset. This is a search hint;
+        the caller must allow vertical adjustment and confirm the raw rails.
         """
         if self.power_rect is None:
             return None

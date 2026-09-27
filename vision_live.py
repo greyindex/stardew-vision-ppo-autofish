@@ -334,7 +334,7 @@ class PanelMatcher:
         return float(np.dot(values, self.reference) / max(np.linalg.norm(values) * self.reference_norm, 1e-8))
 
     def locate_near(self, patch, size):
-        """Confirm an actor-relative panel guess within a few rendered pixels."""
+        """Align a full panel within the area around an actor-relative guess."""
         width, height = size
         if patch.shape[1] < width or patch.shape[0] < height:
             return None
@@ -718,7 +718,7 @@ class VisionSession:
             self.model_info = {"vision_step": self.vision.step, "ppo_steps": int(self.policy.model.num_timesteps),
                                "gpu": torch.cuda.get_device_name(), "torch": str(torch.__version__),
                                "vision_preprocessing": "raw-rails-gated-canonical-outer-context-v1",
-                               "runtime_adapter": "daylight-cast-bite-v4",
+                               "runtime_adapter": "zoom-panel-handoff-v5",
                                "vision_sha256": hashlib.sha256(absolute(self.config["vision_model"]).read_bytes()).hexdigest(),
                                "ppo_sha256": hashlib.sha256(absolute(self.config["ppo_model"]).read_bytes()).hexdigest()}
             self.ready.set()
@@ -731,7 +731,8 @@ class VisionSession:
                 "runtime_refinements": ["actor_panel_prior_v1", "day_night_bite_delta_v1",
                                         "normal_fish_sprite_crosscheck_v1", "treasure_occlusion_hold_120ms",
                                         "start_panel_layout_guard_v1", "validated_energy_confirmation_v1",
-                                        "cast_meter_contrast_v1", "bite_adaptive_core_v1"],
+                                        "cast_meter_contrast_v1", "bite_adaptive_core_v1",
+                                        "zoom_panel_search_v1", "panel_layout_presence_v1"],
                 "cast_hold_seconds": CAST_HOLD_SECONDS,
                 "geometry_calibration": {"fish_offset_native": self.config["fish_offset_native"],
                                          "level": self.config["level"]},
@@ -862,14 +863,15 @@ class VisionSession:
                     if not self.autocycle:
                         self.publish(status="寻找钓鱼面板 · 请手动抛竿和上钩", focused=True, holding=False)
                     # The casting gauge gives an actor-relative panel position.
-                    # A small masked rail search is faster than the first global
-                    # multi-scale scan; geometry still validates the CNN result.
+                    # World zoom can shift the panel relative to the cast meter
+                    # by tens of pixels. Search enough vertical margin to align
+                    # the whole panel instead of accepting a cropped rail match.
                     prior = self.autocycle.panel_prior(client) if self.autocycle else None
                     if prior:
-                        pad = max(4, round(prior["height"] / 75))
-                        x0, y0 = max(0, prior["left"]-pad), max(0, prior["top"]-pad)
-                        x1 = min(client["width"], prior["left"]+prior["width"]+pad)
-                        y1 = min(client["height"], prior["top"]+prior["height"]+pad)
+                        pad_x, pad_y = max(8, round(prior["width"]*.15)), max(12, round(prior["height"]*.20))
+                        x0, y0 = max(0, prior["left"]-pad_x), max(0, prior["top"]-pad_y)
+                        x1 = min(client["width"], prior["left"]+prior["width"]+pad_x)
+                        y1 = min(client["height"], prior["top"]+prior["height"]+pad_y)
                         search = {"left": client["left"]+x0, "top": client["top"]+y0,
                                   "width": x1-x0, "height": y1-y0}
                         patch, _ = self._capture(sct, search)
@@ -925,6 +927,18 @@ class VisionSession:
                                                   float(cfg["fish_offset_native"]), heights,
                                                   sprite_center, sprite_score,
                                                   last_fish[1] if last_fish and captured-last_fish[0] <= .15 else None)
+            # A rail-like world texture can receive a high panel score after
+            # outer-context normalization. Only bar/progress layout can keep
+            # the fishing cycle waiting; fish occlusion may still be allowed.
+            layout_reason = reason
+            panel_present = not bool(reason)
+            if reason and structure >= .965 and predicted["presence_scores"]["panel"] >= .85:
+                _, _, _, layout_reason = decode_geometry(predicted, crop, structure,
+                                                          float(cfg["fish_offset_native"]), (),
+                                                          require_fish=False)
+                panel_present = not bool(layout_reason)
+            evidence["panel_layout_valid"] = panel_present
+            evidence["panel_layout_reason"] = layout_reason
             decode_end = time.perf_counter()
             vision_ms = (time.perf_counter() - t0) * 1000
             capture_ms = (capture_end - capture_start) * 1000
@@ -938,7 +952,6 @@ class VisionSession:
                 reason = "观测已超时，释放输入"
             if not self.active.is_set() or not self.windows.focused(hwnd) or generation != self.generation:
                 reason = "已停止或游戏失去焦点"
-            panel_present = structure >= .965 and predicted["presence_scores"]["panel"] >= .80
             if panel_present:
                 last_panel_seen = captured
             if self.autocycle:
@@ -1000,10 +1013,9 @@ class VisionSession:
                 heights.clear()
                 last_fish = None
                 roi = None
-            elif (not inside and roi_source in ("actor_panel_prior", "background_locator", "previous_panel_location")
-                  and predicted["presence_scores"]["panel"] < .5):
-                # A rail-like world texture is only a proposal. Re-scan on the
-                # next frame instead of staying on it for the full timeout.
+            elif not inside and not panel_present:
+                # Reject an incomplete proposal immediately. In particular a
+                # false panel must not delay pickup or the next hook-to-PPO scan.
                 roi = None
             periods.append(captured)
             hz = (len(periods) - 1) / max(periods[-1] - periods[0], 1e-6) if len(periods) > 1 else 0.
