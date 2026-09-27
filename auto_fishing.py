@@ -197,7 +197,10 @@ class AutoFishingCycle:
         self.idle = self.wait_pose = self.pose_mask = self.wait_watch = None
         self.pose = None
         self.last_pose_time = 0.
+        self.last_pose_log = 0.
         self.idle_since = self.changed_since = None
+        self.harvest_since = None
+        self.harvest = {"visible": False}
         self.last_panel = self.last_valid = time.perf_counter()
         self.cast_started = None
         self.collect_count, self.casts = 0, 0
@@ -231,6 +234,8 @@ class AutoFishingCycle:
             self.pending_audio = None
             self.bite_times.clear()
             self.wait_pose = self.pose_mask = self.wait_watch = None
+            self.harvest_since = None
+            self.harvest = {"visible": False}
         self.session._record({"type": "auto_state", "time": self.entered, "state": phase,
                               "cast": self.casts, "reason": why})
         self.session.note(f"[全自动 {self.casts}] {self.LABELS[phase]}：{why}")
@@ -321,22 +326,59 @@ class AutoFishingCycle:
         idle_difference = float(np.abs(pose.astype(np.float32)-self.idle).mean(2)[selected].mean())
         wait_difference = (float(np.abs(pose.astype(np.float32)-self.wait_pose).mean(2)[selected].mean())
                            if self.wait_pose is not None else 100.)
-        # An item held above the player's head is not the idle pose, even when
-        # most of the body looks identical. Ignore small animated background changes.
+        # Inspect only the space immediately above the actor. Water and grass
+        # beside the head animate continuously and cannot veto an idle pose.
         overhead_height = max(1, relative["top"])
-        overhead_change = np.abs(image[:overhead_height].astype(np.float32)
-                                 - self.idle_watch[:overhead_height]).mean(2) > 48
-        overhead_changed = float(overhead_change.mean()) >= .022
+        center = self.power_rect["left"] + .42*self.power_rect["width"] - self.watch_rect["left"]
+        x0 = max(0, round(center-.25*self.power_rect["width"]))
+        x1 = min(image.shape[1], round(center+.25*self.power_rect["width"]))
+        y0 = max(0, round(overhead_height-.95*self.power_rect["height"]))
+        overhead_change = np.abs(image[y0:overhead_height, x0:x1].astype(np.float32)
+                                 - self.idle_watch[y0:overhead_height, x0:x1]).mean(2) > 48
+        overhead_fraction = float(overhead_change.mean())
+        overhead_changed = overhead_fraction >= .05
+        self.harvest = self.harvest_evidence(image)
+        self.harvest_since = ((self.harvest_since if self.harvest_since is not None else now)
+                              if self.harvest["visible"] else None)
         idle = (idle_difference < 24 and idle_difference < wait_difference * .65
-                and not overhead_changed)
+                and not overhead_changed and not self.harvest["visible"])
         body_changed = wait_difference > 30 if self.wait_pose is not None else idle_difference > 30
         # A bite marker changes pixels above the head. While waiting it must not
         # be interpreted as an item being held up / a completed harvest.
         changed = body_changed or (overhead_changed and self.phase not in ("wait", "settle"))
         self.idle_since = (self.idle_since if self.idle_since is not None else now) if idle else None
         self.changed_since = (self.changed_since if self.changed_since is not None else now) if changed else None
+        if self.phase in ("resolve", "cooldown") and now-self.last_pose_log >= .25:
+            self.session._record({"type": "auto_pose", "time": now, "cast": self.casts, "phase": self.phase,
+                                  "idle_difference": idle_difference, "wait_difference": wait_difference,
+                                  "overhead_fraction": overhead_fraction, "idle_candidate": bool(idle),
+                                  "harvest": self.harvest})
+            self.last_pose_log = now
         return (self.idle_since is not None and now-self.idle_since >= .30,
                 self.changed_since is not None and now-self.changed_since >= .70)
+
+    def harvest_evidence(self, watch):
+        """Require a newly drawn item card above the player before pickup.
+
+        The catch/forage card has a broad pale connected background containing
+        the item frame and text. A moving object, bite marker or cast meter is
+        insufficient; none should produce a short click while the player is idle.
+        """
+        height = max(1, self.actor_rect["top"]-self.watch_rect["top"])
+        overhead = watch[:height]
+        hsv = cv2.cvtColor(overhead, cv2.COLOR_BGR2HSV)
+        novelty = np.abs(overhead.astype(np.int16)-self.idle_watch[:height]).max(2) >= 25
+        paper = ((hsv[:, :, 1] <= 80) & (hsv[:, :, 2] >= 125) & novelty).astype(np.uint8)*255
+        kernel = max(1, round(self.power_rect["height"]/24))
+        paper = cv2.morphologyEx(paper, cv2.MORPH_CLOSE, np.ones((kernel, kernel), np.uint8))
+        _, _, stats, _ = cv2.connectedComponentsWithStats(paper)
+        width, meter_height = self.power_rect["width"], self.power_rect["height"]
+        center = self.power_rect["left"] + .42*width - self.watch_rect["left"]
+        for x, y, w, h, area in stats[1:]:
+            if (w >= .65*width and h >= .55*meter_height and x <= center <= x+w
+                    and area >= .45*width*meter_height and area >= .25*w*h):
+                return {"visible": True, "box": list(map(int, (x, y, w, h))), "paper_area": int(area)}
+        return {"visible": False}
 
     def learn_wait_pose(self, watch):
         relative = {**self.actor_rect, "left": self.actor_rect["left"]-self.watch_rect["left"],
@@ -616,19 +658,24 @@ class AutoFishingCycle:
             if now-self.last_panel < .8:
                 return
             watch = self.capture(sct, client, self.watch_rect)
-            idle, changed = self.observe_pose(watch, now)
+            idle, _ = self.observe_pose(watch, now)
             if idle and elapsed > .8:
                 self.transition("cooldown", "已确认空闲姿势")
-            elif elapsed > 1.6 and changed and self.collect_count < 2:
+            elif (elapsed > 1.6 and self.harvest_since is not None
+                  and now-self.harvest_since >= .12 and self.collect_count < 2):
                 self.collect_count += 1
                 self.session.mouse.set(True, hwnd)
-                self.transition("collect", f"确认收获，第 {self.collect_count} 次")
+                self.transition("collect", f"已确认收获提示，第 {self.collect_count} 次")
             elif elapsed > 6:
                 self.fail("收竿后状态不明；请处理背包/宝箱界面后重新按 F1")
         elif self.phase == "cooldown" and elapsed >= .65:
             frame = self.capture(sct, client)
             if not self.scene_ready(frame):
                 self.fail("出现较大界面变化，请处理菜单/背包后重新按 F1")
+                return
+            idle, _ = self.observe_pose(bounds(frame, self.watch_rect), now)
+            if not idle:
+                self.transition("resolve", "空闲姿势已改变，继续等待收竿或收获提示")
                 return
             self.energy = self.reader.energy_fraction(frame)
             if self.low_energy_confirmed(sct, client):

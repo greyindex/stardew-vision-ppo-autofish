@@ -718,7 +718,7 @@ class VisionSession:
             self.model_info = {"vision_step": self.vision.step, "ppo_steps": int(self.policy.model.num_timesteps),
                                "gpu": torch.cuda.get_device_name(), "torch": str(torch.__version__),
                                "vision_preprocessing": "raw-rails-gated-canonical-outer-context-v1",
-                               "runtime_adapter": "zoom-panel-handoff-v5",
+                               "runtime_adapter": "harvest-popup-idle-v6",
                                "vision_sha256": hashlib.sha256(absolute(self.config["vision_model"]).read_bytes()).hexdigest(),
                                "ppo_sha256": hashlib.sha256(absolute(self.config["ppo_model"]).read_bytes()).hexdigest()}
             self.ready.set()
@@ -732,7 +732,8 @@ class VisionSession:
                                         "normal_fish_sprite_crosscheck_v1", "treasure_occlusion_hold_120ms",
                                         "start_panel_layout_guard_v1", "validated_energy_confirmation_v1",
                                         "cast_meter_contrast_v1", "bite_adaptive_core_v1",
-                                        "zoom_panel_search_v1", "panel_layout_presence_v1"],
+                                        "zoom_panel_search_v1", "panel_layout_presence_v1",
+                                        "harvest_popup_gate_v1", "idle_head_region_v1", "recast_idle_confirmation_v1"],
                 "cast_hold_seconds": CAST_HOLD_SECONDS,
                 "geometry_calibration": {"fish_offset_native": self.config["fish_offset_native"],
                                          "level": self.config["level"]},
