@@ -1,0 +1,7 @@
+{
+  "steps": 10001216,
+  "seed": 3000000,
+  "episodes": 2000,
+  "catch_rate": 0.871,
+  "selection_rule": "highest development catch rate; earlier checkpoint wins ties"
+}

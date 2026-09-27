@@ -11,6 +11,7 @@ import os
 import threading
 import time
 import ctypes
+from ctypes import wintypes
 import traceback
 from datetime import datetime
 
@@ -19,8 +20,10 @@ import tkinter as tk
 import numpy as np
 import mss
 import pydirectinput
+from pynput import mouse as pynput_mouse
 
-from main import load_config, grab, detect, BarController, Mouse, _runtime_dir
+from audio_bite import AudioBiteDetector
+from main import load_config, grab, detect, BarController, Mouse, _runtime_dir, find_game_hwnd
 
 pydirectinput.PAUSE = 0
 pydirectinput.FAILSAFE = False
@@ -86,10 +89,11 @@ class AssistGUI:
     def _worker(self):
         cfg = self.cfg
         mouse = Mouse()
-        ctrl = BarController(cfg)
-        interval = 1.0 / max(int(cfg["fps"]), 5)
+        use_ppo = cfg.get("controller", "rule") == "ppo"
+        ctrl = None
+        interval = 1.0 / (30 if use_ppo else max(int(cfg["fps"]), 5))
         bar_grace = float(cfg.get("bar_grace", 0.35))
-        min_pulse = float(cfg.get("min_pulse", 0.0))
+        min_pulse = 0.0 if use_ppo else float(cfg.get("min_pulse", 0.0))
         confirm_frames = int(cfg.get("confirm_frames", 3))   # 진입 확정에 필요한 연속 프레임
         in_prev = False
         confirm = 0                 # 초록바+물고기 동시 검출 연속 프레임 카운터(진입 게이트)
@@ -103,14 +107,64 @@ class AssistGUI:
         mg_errs = []
         mg_start = 0.0
         mg_no = 0
+        worker_start_t = time.perf_counter()
+        auto_hook = bool(cfg.get("auto_hook", False))
+        game_hwnd = find_game_hwnd(cfg.get("game_title", "Stardew"))
+        last_window_search = 0.0
+        last_wait_log = 0.0
+        cast_down_t = None
+        cast_ready_t = 0.0
+        hook_pending_until = 0.0
+        tracking_cast = False
+        cast_lock = threading.Lock()
+        listener = None
+        audio = None
 
         # ---- 로그 파일 열기(항상 기록). logs/assist_YYYYMMDD_HHMMSS.log ----
         log = self._open_log(cfg)
 
+        def drive(now, bar, fish, frame, progress_frame, progress, vision_ms):
+            press = ctrl.update(now, bar, fish, progress, vision_ms) if use_ppo else ctrl.update(now, bar, fish)
+            # Check again immediately before input, after capture and inference.
+            if not self.running or ctypes.windll.user32.GetForegroundWindow() != game_hwnd:
+                mouse.up()
+            else:
+                mouse.set(press, now, min_pulse)
+            if use_ppo:
+                ctrl.input_applied(mouse.holding, time.perf_counter())
+                ctrl.snapshot(frame, progress_frame, now)
+            return mouse.holding
+
+        def tracking_status(bar, fish):
+            if use_ppo:
+                return ctrl.status
+            return "미니게임 제어중  bar=%d fish=%s" % (int(bar["center"]), int(fish["center"]) if fish else None)
+
+        def on_click(_x, _y, button, pressed):
+            nonlocal cast_down_t, cast_ready_t, hook_pending_until
+            if button != pynput_mouse.Button.left or not tracking_cast or not game_hwnd:
+                return
+            now = time.perf_counter()
+            with cast_lock:
+                if pressed:
+                    rect = wintypes.RECT()
+                    if ctypes.windll.user32.GetWindowRect(game_hwnd, ctypes.byref(rect)) and (
+                        rect.left <= _x < rect.right and rect.top <= _y < rect.bottom
+                    ):
+                        cast_down_t = now
+                elif cast_down_t is not None:
+                    held = now - cast_down_t
+                    cast_down_t = None
+                    if held >= 0.12 and ctypes.windll.user32.GetForegroundWindow() == game_hwnd:
+                        hook_pending_until = 0.0
+                        cast_ready_t = now + float(cfg.get("cast_settle", 1.7))
+                        log("   [手动抛竿] 按住 %.2f 秒，%.1f 秒后开始监听咬钩" %
+                            (held, float(cfg.get("cast_settle", 1.7))))
+
         def summarize():
             if mg_frames <= 0:
                 return
-            dur = time.time() - mg_start
+            dur = time.perf_counter() - mg_start
             if mg_errs:
                 arr = sorted(mg_errs)
                 med = arr[len(arr) // 2]
@@ -127,23 +181,69 @@ class AssistGUI:
 
         err_streak = 0                              # 연속 프레임 오류 카운터
         try:
+            if use_ppo:
+                self.status = "正在加载 1000 万步 PPO 模型…"
+                from ppo_live import PPOController, detect_progress
+                ctrl = PPOController(cfg, log=log, log_path=self.logpath)
+            else:
+                ctrl = BarController(cfg)
+            if auto_hook:
+                audio = AudioBiteDetector(cfg, log=log)
+                listener = pynput_mouse.Listener(on_click=on_click)
+                listener.start()
             with mss.mss() as sct:
                 while self.running:
-                    t0 = time.time()
+                    t0 = time.perf_counter()
                     try:
+                        if game_hwnd and not ctypes.windll.user32.IsWindow(game_hwnd):
+                            game_hwnd = None
+                        if game_hwnd is None and t0 - last_window_search >= 1.0:
+                            game_hwnd = find_game_hwnd(cfg.get("game_title", "Stardew"))
+                            last_window_search = t0
+                        focused = bool(game_hwnd and ctypes.windll.user32.GetForegroundWindow() == game_hwnd)
+                        if not focused:
+                            tracking_cast = auto_hook
+                            if audio is not None:
+                                audio.arm(False)
+                            if in_prev:
+                                summarize()
+                                in_prev = False
+                            confirm = 0
+                            ctrl.reset()
+                            mouse.up()
+                            self.status = ("未找到星露谷窗口" if game_hwnd is None else "请切回星露谷游戏窗口")
+                            time.sleep(interval)
+                            continue
+
+                        vision_started = time.perf_counter()
                         frame = grab(sct, cfg["roi"])
                         bar, fish, _, _ = detect(frame, cfg)
+                        progress_frame = grab(sct, cfg["progress_roi"]) if use_ppo else None
+                        progress = detect_progress(progress_frame) if use_ppo else (None, 0.0)
+                        vision_ms = (time.perf_counter() - vision_started) * 1000
+
+                        if audio is not None:
+                            with cast_lock:
+                                ready = cast_ready_t > 0 and t0 >= cast_ready_t
+                            audio.arm(ready and not in_prev)
 
                         if not in_prev:
+                            tracking_cast = auto_hook and t0 >= hook_pending_until
                             # ---- 아직 미니게임 아님: 진입 게이트만 평가(마우스 절대 안 누름) ----
                             # 진짜 미니게임 = 초록 바 + 청록 물고기가 '함께' 있음. 메뉴/배경 초록이나
                             # 물고기 없는 정적 초록(phantom)에 낚이지 않도록, 둘 다 연속 검출돼야 확정.
-                            if bar is not None and fish is not None:
+                            if bar is not None and fish is not None and (not use_ppo or progress[0] is not None):
                                 confirm += 1
                             else:
                                 confirm = 0
                             if confirm >= confirm_frames:
                                 in_prev = True
+                                tracking_cast = False
+                                hook_pending_until = 0.0
+                                if audio is not None:
+                                    audio.arm(False)
+                                with cast_lock:
+                                    cast_ready_t = 0.0
                                 confirm = 0
                                 mg_no += 1
                                 mg_frames = 0
@@ -154,9 +254,8 @@ class AssistGUI:
                                 bar_seen_t = t0
                                 log(">> 미니게임#%d 시작" % mg_no)
                                 # 확정 프레임부터 바로 제어
-                                press = ctrl.update(t0, bar, fish)
+                                press = drive(t0, bar, fish, frame, progress_frame, progress, vision_ms)
                                 last_press = press
-                                mouse.set(press, t0, min_pulse)
                                 mg_frames += 1
                                 bc = int(bar["center"])
                                 fy = int(fish["center"])
@@ -164,19 +263,66 @@ class AssistGUI:
                                 mg_errs.append(abs(bc - fy))
                                 if bar["top"] <= fish["center"] <= bar["bottom"]:
                                     mg_inside += 1
-                                self.status = "미니게임 제어중  bar=%d fish=%s" % (bc, fy)
+                                self.status = tracking_status(bar, fish)
                             else:
                                 # 미확정 — phantom일 수 있으니 마우스 놓고 대기
                                 ctrl.reset()
                                 mouse.up()
-                                self.status = "대기중 — 직접 캐스팅→'!' 후킹하세요"
+                                if use_ppo and bar is not None and fish is not None and progress[0] is None:
+                                    self.status = "已识别鱼和绿条，但未识别右侧进度；请检查进度槽选区"
+                                elif bar is not None and fish is None:
+                                    self.status = "已识别绿色条，但未识别鱼标记；请检查选区"
+                                elif bar is None and fish is not None:
+                                    self.status = "已识别鱼标记，但未识别绿色条；请检查选区"
+                                elif confirm:
+                                    self.status = "正在确认钓鱼小游戏…"
+                                elif t0 < hook_pending_until:
+                                    self.status = "已自动上钩，等待钓鱼小游戏…"
+                                elif hook_pending_until > 0:
+                                    self.status = "上钩后未识别小游戏；请检查选区或鱼是否逃脱"
+                                elif auto_hook and audio is not None:
+                                    with cast_lock:
+                                        ready_at = cast_ready_t
+                                    if not audio.ok and t0 - worker_start_t > 3.0:
+                                        self.status = "音效监听不可用；请手动上钩"
+                                    elif ready_at <= 0:
+                                        self.status = "待抛竿：请在游戏中按住左键抛竿"
+                                    elif t0 < ready_at:
+                                        self.status = "已抛竿，等待鱼漂落水…"
+                                    elif audio.consume_spike():
+                                        tracking_cast = False
+                                        audio.arm(False)
+                                        with cast_lock:
+                                            cast_ready_t = 0.0
+                                        if self.running and ctypes.windll.user32.GetForegroundWindow() == game_hwnd:
+                                            mouse.click(hold=0.05)
+                                        hook_pending_until = time.perf_counter() + float(cfg.get("minigame_grace", 1.6))
+                                        log("   [自动上钩] 检测到咬钩音效，已点击左键")
+                                        self.status = "已自动上钩，等待钓鱼小游戏…"
+                                    else:
+                                        threshold = max(
+                                            float(cfg.get("bite_sound_floor", 0.03)),
+                                            audio.baseline * float(cfg.get("bite_sound_ratio", 3.5)),
+                                        )
+                                        self.status = "等待咬钩音效（音量 %.3f / 阈值 %.3f）" % (
+                                            audio.level, threshold)
+                                else:
+                                    self.status = "待命中：请手动抛竿，咬钩时点击左键"
+                                if t0 - last_wait_log >= 2.0 and (bar is not None or fish is not None or auto_hook):
+                                    log("   [待命识别] bar=%s fish=%s progress=%s confidence=%.3f audio=%s level=%.4f baseline=%.4f" %
+                                        (int(bar["center"]) if bar else None,
+                                         int(fish["center"]) if fish else None,
+                                         progress[0] if use_ppo else None, progress[1] if use_ppo else 0.0,
+                                         audio.ok if audio is not None else None,
+                                         audio.level if audio is not None else 0.0,
+                                         audio.baseline if audio is not None else 0.0))
+                                    last_wait_log = t0
                         elif bar is not None:
                             # ---- 확정된 미니게임 진행 중 ----
                             # focus_window 안 함: 보조모드는 게임이 이미 포그라운드. 재포커스하면 freeze.
                             bar_seen_t = t0
-                            press = ctrl.update(t0, bar, fish)
+                            press = drive(t0, bar, fish, frame, progress_frame, progress, vision_ms)
                             last_press = press
-                            mouse.set(press, t0, min_pulse)
                             mg_frames += 1
                             bc = int(bar["center"])
                             fy = int(fish["center"]) if fish else None
@@ -185,7 +331,7 @@ class AssistGUI:
                                 mg_errs.append(abs(bc - fy))
                                 if bar["top"] <= fish["center"] <= bar["bottom"]:
                                     mg_inside += 1                # 물고기가 초록 바 안에 있음
-                            self.status = "미니게임 제어중  bar=%d fish=%s" % (bc, fy)
+                            self.status = tracking_status(bar, fish)
                             if t0 - last_log >= 0.1:              # 0.1초 간격 상세 로그
                                 log("   bar=%d fish=%s vel=%.0f pred=%d %s"
                                     % (bc, fy, ctrl.last_vel, int(ctrl.last_pred),
@@ -193,14 +339,20 @@ class AssistGUI:
                                 last_log = t0
                         elif (t0 - bar_seen_t) < bar_grace:
                             # 순간 끊김(초록 flicker) — 리셋하지 말고 직전 동작 유지(연속성 보존)
-                            mouse.set(last_press, t0, min_pulse)
+                            if use_ppo:
+                                last_press = drive(t0, bar, fish, frame, progress_frame, progress, vision_ms)
+                                self.status = ctrl.status
+                            else:
+                                mouse.set(last_press, t0, min_pulse)
                         else:
                             in_prev = False
                             confirm = 0
                             summarize()                           # 미니게임 종료 요약
                             ctrl.reset()
                             mouse.up()
-                            self.status = "대기중 — 직접 캐스팅→'!' 후킹하세요"
+                            tracking_cast = auto_hook
+                            self.status = ("待抛竿：请在游戏中按住左键抛竿" if auto_hook else
+                                           "待命中：请手动抛竿，咬钩时点击左键")
                         err_streak = 0
                     except Exception as e:
                         # 프레임 단위 오류는 세션을 죽이지 않고 로그만 남기고 계속(일시적 글리치 방어).
@@ -208,13 +360,15 @@ class AssistGUI:
                         log("   [프레임 오류 %d] %s: %s" % (err_streak, type(e).__name__, e))
                         try:
                             mouse.up()                            # 오류 시 마우스는 반드시 놓아 안전 확보
+                            if ctrl is not None:
+                                ctrl.reset()
                         except Exception:
                             pass
                         if err_streak >= 30:                      # ~0.5초 연속 오류면 세션 중단
                             self.worker_error = "연속 프레임 오류 %d회 (%s)" % (err_streak, type(e).__name__)
                             log("   [치명] " + self.worker_error + " — 세션 중단\n" + traceback.format_exc())
                             break
-                    el = time.time() - t0
+                    el = time.perf_counter() - t0
                     if el < interval:
                         time.sleep(interval - el)
         except Exception as e:
@@ -222,12 +376,22 @@ class AssistGUI:
             self.worker_error = "%s: %s" % (type(e).__name__, e)
             log("[치명적 오류] 워커 중단\n" + traceback.format_exc())
         finally:
+            if audio is not None:
+                audio.arm(False)
+                audio.stop()
+            if listener is not None:
+                listener.stop()
             if in_prev:
                 summarize()
             try:
                 mouse.up()                          # 정지 시 반드시 버튼 떼기
             except Exception:
                 pass
+            if use_ppo and ctrl is not None:
+                try:
+                    ctrl.close()
+                except OSError as exc:
+                    log("[PPO] 关闭诊断文件时出错：%s" % exc)
             tail = "" if not self.worker_error else "  (오류: %s)" % self.worker_error
             log("[%s] 세션 종료%s" % (datetime.now().strftime("%H:%M:%S"), tail))
             self._close_log()
@@ -255,7 +419,7 @@ class AssistGUI:
             except Exception:
                 pass
 
-        params = {k: cfg.get(k) for k in ("lookahead", "vel_window", "min_pulse", "bar_grace", "aim_offset", "fps")}
+        params = {k: cfg.get(k) for k in ("controller", "ppo_model", "ppo_level", "ppo_tackle", "progress_roi", "lookahead", "vel_window", "min_pulse", "bar_grace", "aim_offset", "fps", "roi", "fish_margin_bottom", "auto_hook")}
         log("[%s] 세션 시작  params=%s" % (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), params))
         return log
 

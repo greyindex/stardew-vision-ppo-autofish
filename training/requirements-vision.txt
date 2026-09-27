@@ -1,0 +1,4 @@
+# Install CUDA Torch separately from the official CUDA index (see README).
+numpy
+pillow
+opencv-python

@@ -1,0 +1,6 @@
+mss
+opencv-python==4.14.0.94
+numpy
+pydirectinput
+pynput
+soundcard==0.4.6

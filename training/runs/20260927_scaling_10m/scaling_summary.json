@@ -1,0 +1,909 @@
+{
+  "start_steps": 2002944,
+  "terminal_steps": 10001216,
+  "best_development_steps": 10001216,
+  "continuation_wall_seconds_including_development": 788.2500000001164,
+  "development_curve": [
+    {
+      "steps": 2002944,
+      "catch_pct": 84.95,
+      "catch_ci95_low_pct": 83.31598700909112,
+      "catch_ci95_high_pct": 86.45000647063304,
+      "hard_catch_pct": 21.686746987951807,
+      "hard_episodes": 249,
+      "perfect_pct": 39.95,
+      "mean_catch_seconds": 9.023337257210123,
+      "gain_from_start_pp": 0.0,
+      "gain_ci95_low_pp": 0.0,
+      "gain_ci95_high_pp": 0.0
+    },
+    {
+      "steps": 3002944,
+      "catch_pct": 81.75,
+      "catch_ci95_low_pct": 79.9968181254557,
+      "catch_ci95_high_pct": 83.38144490691174,
+      "hard_catch_pct": 17.670682730923694,
+      "hard_episodes": 249,
+      "perfect_pct": 43.2,
+      "mean_catch_seconds": 8.382242609582057,
+      "gain_from_start_pp": -3.2,
+      "gain_ci95_low_pp": -4.25,
+      "gain_ci95_high_pp": -2.15
+    },
+    {
+      "steps": 4002944,
+      "catch_pct": 85.95,
+      "catch_ci95_low_pct": 84.35797212767918,
+      "catch_ci95_high_pct": 87.40418711684396,
+      "hard_catch_pct": 25.301204819277107,
+      "hard_episodes": 249,
+      "perfect_pct": 45.9,
+      "mean_catch_seconds": 9.217277486910994,
+      "gain_from_start_pp": 1.0,
+      "gain_ci95_low_pp": 0.25,
+      "gain_ci95_high_pp": 1.7999999999999998
+    },
+    {
+      "steps": 5002944,
+      "catch_pct": 85.1,
+      "catch_ci95_low_pct": 83.47212786970121,
+      "catch_ci95_high_pct": 86.59329047474277,
+      "hard_catch_pct": 24.096385542168676,
+      "hard_episodes": 249,
+      "perfect_pct": 48.699999999999996,
+      "mean_catch_seconds": 8.16159420289855,
+      "gain_from_start_pp": 0.15,
+      "gain_ci95_low_pp": -0.6,
+      "gain_ci95_high_pp": 0.8999999999999999
+    },
+    {
+      "steps": 6002944,
+      "catch_pct": 85.0,
+      "catch_ci95_low_pct": 83.36802797156251,
+      "catch_ci95_high_pct": 86.49777379640157,
+      "hard_catch_pct": 23.293172690763054,
+      "hard_episodes": 249,
+      "perfect_pct": 46.400000000000006,
+      "mean_catch_seconds": 8.660019607843138,
+      "gain_from_start_pp": 0.05,
+      "gain_ci95_low_pp": -0.8,
+      "gain_ci95_high_pp": 0.8999999999999999
+    },
+    {
+      "steps": 7002944,
+      "catch_pct": 85.35000000000001,
+      "catch_ci95_low_pct": 83.73248362327892,
+      "catch_ci95_high_pct": 86.83197616236482,
+      "hard_catch_pct": 22.08835341365462,
+      "hard_episodes": 249,
+      "perfect_pct": 40.2,
+      "mean_catch_seconds": 9.123999218902558,
+      "gain_from_start_pp": 0.4,
+      "gain_ci95_low_pp": -0.35000000000000003,
+      "gain_ci95_high_pp": 1.15
+    },
+    {
+      "steps": 8002944,
+      "catch_pct": 86.9,
+      "catch_ci95_low_pct": 85.35026144208544,
+      "catch_ci95_high_pct": 88.30825527899671,
+      "hard_catch_pct": 26.506024096385545,
+      "hard_episodes": 249,
+      "perfect_pct": 47.4,
+      "mean_catch_seconds": 8.47916187188339,
+      "gain_from_start_pp": 1.95,
+      "gain_ci95_low_pp": 1.2,
+      "gain_ci95_high_pp": 2.75
+    },
+    {
+      "steps": 9002944,
+      "catch_pct": 85.55,
+      "catch_ci95_low_pct": 83.94087895221818,
+      "catch_ci95_high_pct": 87.02281398638534,
+      "hard_catch_pct": 27.309236947791167,
+      "hard_episodes": 249,
+      "perfect_pct": 44.6,
+      "mean_catch_seconds": 9.210773426845899,
+      "gain_from_start_pp": 0.6,
+      "gain_ci95_low_pp": -0.35000000000000003,
+      "gain_ci95_high_pp": 1.55
+    },
+    {
+      "steps": 10001216,
+      "catch_pct": 87.1,
+      "catch_ci95_low_pct": 85.55948290650491,
+      "catch_ci95_high_pct": 88.49826696753703,
+      "hard_catch_pct": 28.915662650602407,
+      "hard_episodes": 249,
+      "perfect_pct": 48.9,
+      "mean_catch_seconds": 8.466121316494451,
+      "gain_from_start_pp": 2.15,
+      "gain_ci95_low_pp": 1.35,
+      "gain_ci95_high_pp": 2.9499999999999997
+    }
+  ],
+  "development_intervals": [
+    {
+      "from_steps": 2002944,
+      "to_steps": 4002944,
+      "overall": {
+        "episodes": 2000,
+        "gain_pp": 1.0,
+        "gain_ci95_pp": [
+          0.25,
+          1.7999999999999998
+        ],
+        "improved_episodes": 41,
+        "regressed_episodes": 21,
+        "unchanged_episodes": 1938,
+        "method": "20,000 episode-paired bootstrap draws; does not measure training-seed variability"
+      },
+      "hard": {
+        "episodes": 249,
+        "gain_pp": 3.614457831325301,
+        "gain_ci95_pp": [
+          0.4016064257028112,
+          6.827309236947792
+        ],
+        "improved_episodes": 13,
+        "regressed_episodes": 4,
+        "unchanged_episodes": 232,
+        "method": "20,000 episode-paired bootstrap draws; does not measure training-seed variability"
+      }
+    },
+    {
+      "from_steps": 4002944,
+      "to_steps": 6002944,
+      "overall": {
+        "episodes": 2000,
+        "gain_pp": -0.95,
+        "gain_ci95_pp": [
+          -1.7500000000000002,
+          -0.15
+        ],
+        "improved_episodes": 24,
+        "regressed_episodes": 43,
+        "unchanged_episodes": 1933,
+        "method": "20,000 episode-paired bootstrap draws; does not measure training-seed variability"
+      },
+      "hard": {
+        "episodes": 249,
+        "gain_pp": -2.0080321285140563,
+        "gain_ci95_pp": [
+          -5.622489959839357,
+          1.6064257028112447
+        ],
+        "improved_episodes": 8,
+        "regressed_episodes": 13,
+        "unchanged_episodes": 228,
+        "method": "20,000 episode-paired bootstrap draws; does not measure training-seed variability"
+      }
+    },
+    {
+      "from_steps": 6002944,
+      "to_steps": 8002944,
+      "overall": {
+        "episodes": 2000,
+        "gain_pp": 1.9,
+        "gain_ci95_pp": [
+          1.0,
+          2.8000000000000003
+        ],
+        "improved_episodes": 63,
+        "regressed_episodes": 25,
+        "unchanged_episodes": 1912,
+        "method": "20,000 episode-paired bootstrap draws; does not measure training-seed variability"
+      },
+      "hard": {
+        "episodes": 249,
+        "gain_pp": 3.2128514056224895,
+        "gain_ci95_pp": [
+          -0.8032128514056224,
+          7.228915662650602
+        ],
+        "improved_episodes": 18,
+        "regressed_episodes": 10,
+        "unchanged_episodes": 221,
+        "method": "20,000 episode-paired bootstrap draws; does not measure training-seed variability"
+      }
+    },
+    {
+      "from_steps": 8002944,
+      "to_steps": 10001216,
+      "overall": {
+        "episodes": 2000,
+        "gain_pp": 0.2,
+        "gain_ci95_pp": [
+          -0.5,
+          0.95
+        ],
+        "improved_episodes": 29,
+        "regressed_episodes": 25,
+        "unchanged_episodes": 1946,
+        "method": "20,000 episode-paired bootstrap draws; does not measure training-seed variability"
+      },
+      "hard": {
+        "episodes": 249,
+        "gain_pp": 2.4096385542168677,
+        "gain_ci95_pp": [
+          -1.6064257028112447,
+          6.425702811244979
+        ],
+        "improved_episodes": 17,
+        "regressed_episodes": 11,
+        "unchanged_episodes": 221,
+        "method": "20,000 episode-paired bootstrap draws; does not measure training-seed variability"
+      }
+    },
+    {
+      "from_steps": 6002944,
+      "to_steps": 10001216,
+      "overall": {
+        "episodes": 2000,
+        "gain_pp": 2.1,
+        "gain_ci95_pp": [
+          1.25,
+          2.9499999999999997
+        ],
+        "improved_episodes": 59,
+        "regressed_episodes": 17,
+        "unchanged_episodes": 1924,
+        "method": "20,000 episode-paired bootstrap draws; does not measure training-seed variability"
+      },
+      "hard": {
+        "episodes": 249,
+        "gain_pp": 5.622489959839357,
+        "gain_ci95_pp": [
+          2.0080321285140563,
+          9.236947791164658
+        ],
+        "improved_episodes": 18,
+        "regressed_episodes": 4,
+        "unchanged_episodes": 227,
+        "method": "20,000 episode-paired bootstrap draws; does not measure training-seed variability"
+      }
+    }
+  ],
+  "holdout": {
+    "start": {
+      "episodes": 5000,
+      "catch_rate": 0.8642,
+      "catch_ci95": [
+        0.8544241971235508,
+        0.8734165882442354
+      ],
+      "perfect_rate": 0.3898,
+      "mean_seconds": 9.291253333333332,
+      "mean_catch_seconds": 9.142667592378308,
+      "timeout_rate": 0.0008,
+      "stage": "full",
+      "wall_seconds": 40.14000000001397,
+      "by_behavior": {
+        "Mixed": {
+          "episodes": 1982,
+          "catch_rate": 0.8410696266397578,
+          "catch_ci95": [
+            0.8243156639723216,
+            0.8565039945543201
+          ],
+          "perfect_rate": 0.4167507568113017,
+          "mean_seconds": 9.037302388160109,
+          "mean_catch_seconds": 9.026654669066184,
+          "timeout_rate": 0.0005045408678102926
+        },
+        "Smooth": {
+          "episodes": 816,
+          "catch_rate": 0.9938725490196079,
+          "catch_ci95": [
+            0.9857367369279972,
+            0.9973800017200538
+          ],
+          "perfect_rate": 0.6299019607843137,
+          "mean_seconds": 6.892156862745098,
+          "mean_catch_seconds": 6.902034525277434,
+          "timeout_rate": 0.0
+        },
+        "Sinker": {
+          "episodes": 805,
+          "catch_rate": 0.8869565217391304,
+          "catch_ci95": [
+            0.8632192276920394,
+            0.907018109259967
+          ],
+          "perfect_rate": 0.3590062111801242,
+          "mean_seconds": 8.991946169772257,
+          "mean_catch_seconds": 8.796755368814193,
+          "timeout_rate": 0.002484472049689441
+        },
+        "Dart": {
+          "episodes": 1204,
+          "catch_rate": 0.7965116279069767,
+          "catch_ci95": [
+            0.7728442194569154,
+            0.8182928965357776
+          ],
+          "perfect_rate": 0.2591362126245847,
+          "mean_seconds": 11.135894241417498,
+          "mean_catch_seconds": 10.982707681612792,
+          "timeout_rate": 0.0008305647840531562
+        },
+        "Floater": {
+          "episodes": 193,
+          "catch_rate": 0.8808290155440415,
+          "catch_ci95": [
+            0.8275290373379073,
+            0.9192643234151042
+          ],
+          "perfect_rate": 0.04145077720207254,
+          "mean_seconds": 11.783419689119171,
+          "mean_catch_seconds": 12.042254901960785,
+          "timeout_rate": 0.0
+        }
+      },
+      "by_difficulty": {
+        "70-89": {
+          "episodes": 1310,
+          "catch_rate": 0.815267175572519,
+          "catch_ci95": [
+            0.7933402302798908,
+            0.8353504733787541
+          ],
+          "perfect_rate": 0.022137404580152672,
+          "mean_seconds": 12.404083969465649,
+          "mean_catch_seconds": 13.030805243445695,
+          "timeout_rate": 0.0
+        },
+        "40-69": {
+          "episodes": 2342,
+          "catch_rate": 0.9803586678052946,
+          "catch_ci95": [
+            0.9739017392736907,
+            0.9852423052346851
+          ],
+          "perfect_rate": 0.5486763450042699,
+          "mean_seconds": 7.807678622260176,
+          "mean_catch_seconds": 7.591521486643439,
+          "timeout_rate": 0.0004269854824935952
+        },
+        "<40": {
+          "episodes": 829,
+          "catch_rate": 1.0,
+          "catch_ci95": [
+            0.9953873581723103,
+            1.0
+          ],
+          "perfect_rate": 0.7647768395657418,
+          "mean_seconds": 6.163550462404503,
+          "mean_catch_seconds": 6.163550462404504,
+          "timeout_rate": 0.0
+        },
+        ">=90": {
+          "episodes": 519,
+          "catch_rate": 0.2466281310211946,
+          "catch_ci95": [
+            0.2114944039934165,
+            0.2854851783504521
+          ],
+          "perfect_rate": 0.0019267822736030828,
+          "mean_seconds": 13.1247591522158,
+          "mean_catch_seconds": 23.819140625,
+          "timeout_rate": 0.005780346820809248
+        }
+      },
+      "controller": "ppo",
+      "steps": 2002944,
+      "model": "C:\\Users\\qq139\\Documents\\ChatGPT\\test\\stardew-autofish\\training\\runs\\20260927_scaling_10m\\initial.zip",
+      "seed": 4000000,
+      "weight_sha256": "f5176e3393fcc3ba664d2093f067fd4b888c7f553fba7ebe8b342914d92b376c",
+      "selection": "Development catch rate only; no holdout model selection"
+    },
+    "terminal": {
+      "episodes": 5000,
+      "catch_rate": 0.8894,
+      "catch_ci95": [
+        0.8804056922197436,
+        0.8977963995491085
+      ],
+      "perfect_rate": 0.4948,
+      "mean_seconds": 8.75506,
+      "mean_catch_seconds": 8.630406266396824,
+      "timeout_rate": 0.0,
+      "stage": "full",
+      "wall_seconds": 37.40600000007544,
+      "by_behavior": {
+        "Mixed": {
+          "episodes": 1982,
+          "catch_rate": 0.8607467204843592,
+          "catch_ci95": [
+            0.8448055303802534,
+            0.8752921853690793
+          ],
+          "perfect_rate": 0.5267406659939455,
+          "mean_seconds": 8.548377060208542,
+          "mean_catch_seconds": 8.48022665103556,
+          "timeout_rate": 0.0
+        },
+        "Smooth": {
+          "episodes": 816,
+          "catch_rate": 0.9975490196078431,
+          "catch_ci95": [
+            0.9911076162132371,
+            0.9993276093230128
+          ],
+          "perfect_rate": 0.75,
+          "mean_seconds": 6.618995098039215,
+          "mean_catch_seconds": 6.627805077805078,
+          "timeout_rate": 0.0
+        },
+        "Dart": {
+          "episodes": 1204,
+          "catch_rate": 0.8355481727574751,
+          "catch_ci95": [
+            0.8135484324826283,
+            0.8554134578844528
+          ],
+          "perfect_rate": 0.33970099667774084,
+          "mean_seconds": 10.38187984496124,
+          "mean_catch_seconds": 10.258134526176276,
+          "timeout_rate": 0.0
+        },
+        "Sinker": {
+          "episodes": 805,
+          "catch_rate": 0.9180124223602485,
+          "catch_ci95": [
+            0.8970161167131981,
+            0.9350380209572678
+          ],
+          "perfect_rate": 0.484472049689441,
+          "mean_seconds": 8.58952380952381,
+          "mean_catch_seconds": 8.47318448353631,
+          "timeout_rate": 0.0
+        },
+        "Floater": {
+          "episodes": 193,
+          "catch_rate": 0.9430051813471503,
+          "catch_ci95": [
+            0.9008381397805422,
+            0.9678806676260222
+          ],
+          "perfect_rate": 0.09844559585492228,
+          "mean_seconds": 10.450604490500863,
+          "mean_catch_seconds": 10.63598901098901,
+          "timeout_rate": 0.0
+        }
+      },
+      "by_difficulty": {
+        "70-89": {
+          "episodes": 1310,
+          "catch_rate": 0.8580152671755725,
+          "catch_ci95": [
+            0.8380659221993949,
+            0.875870978565507
+          ],
+          "perfect_rate": 0.07862595419847328,
+          "mean_seconds": 11.4064631043257,
+          "mean_catch_seconds": 11.716844602609727,
+          "timeout_rate": 0.0
+        },
+        "40-69": {
+          "episodes": 2342,
+          "catch_rate": 0.9931682322801024,
+          "catch_ci95": [
+            0.9889307888787431,
+            0.9957904301498561
+          ],
+          "perfect_rate": 0.697267292912041,
+          "mean_seconds": 7.103195274693994,
+          "mean_catch_seconds": 7.063320435654915,
+          "timeout_rate": 0.0
+        },
+        "<40": {
+          "episodes": 829,
+          "catch_rate": 1.0,
+          "catch_ci95": [
+            0.9953873581723103,
+            1.0
+          ],
+          "perfect_rate": 0.8890229191797346,
+          "mean_seconds": 5.990028146361078,
+          "mean_catch_seconds": 5.990028146361078,
+          "timeout_rate": 0.0
+        },
+        ">=90": {
+          "episodes": 519,
+          "catch_rate": 0.3236994219653179,
+          "catch_ci95": [
+            0.2848676532272629,
+            0.36512194209185483
+          ],
+          "perfect_rate": 0.0019267822736030828,
+          "mean_seconds": 13.933365446371226,
+          "mean_catch_seconds": 22.706349206349206,
+          "timeout_rate": 0.0
+        }
+      },
+      "controller": "ppo",
+      "steps": 10001216,
+      "model": "C:\\Users\\qq139\\Documents\\ChatGPT\\test\\stardew-autofish\\training\\runs\\20260927_scaling_10m\\final.zip",
+      "seed": 4000000,
+      "weight_sha256": "144eca2ca4e769e5f3c9fa8316b2e33cc22707470141c1355b07a52d8c854495",
+      "selection": "Development catch rate only; no holdout model selection"
+    },
+    "selected": {
+      "episodes": 5000,
+      "catch_rate": 0.8894,
+      "catch_ci95": [
+        0.8804056922197436,
+        0.8977963995491085
+      ],
+      "perfect_rate": 0.4948,
+      "mean_seconds": 8.75506,
+      "mean_catch_seconds": 8.630406266396824,
+      "timeout_rate": 0.0,
+      "stage": "full",
+      "wall_seconds": 37.40600000007544,
+      "by_behavior": {
+        "Mixed": {
+          "episodes": 1982,
+          "catch_rate": 0.8607467204843592,
+          "catch_ci95": [
+            0.8448055303802534,
+            0.8752921853690793
+          ],
+          "perfect_rate": 0.5267406659939455,
+          "mean_seconds": 8.548377060208542,
+          "mean_catch_seconds": 8.48022665103556,
+          "timeout_rate": 0.0
+        },
+        "Smooth": {
+          "episodes": 816,
+          "catch_rate": 0.9975490196078431,
+          "catch_ci95": [
+            0.9911076162132371,
+            0.9993276093230128
+          ],
+          "perfect_rate": 0.75,
+          "mean_seconds": 6.618995098039215,
+          "mean_catch_seconds": 6.627805077805078,
+          "timeout_rate": 0.0
+        },
+        "Dart": {
+          "episodes": 1204,
+          "catch_rate": 0.8355481727574751,
+          "catch_ci95": [
+            0.8135484324826283,
+            0.8554134578844528
+          ],
+          "perfect_rate": 0.33970099667774084,
+          "mean_seconds": 10.38187984496124,
+          "mean_catch_seconds": 10.258134526176276,
+          "timeout_rate": 0.0
+        },
+        "Sinker": {
+          "episodes": 805,
+          "catch_rate": 0.9180124223602485,
+          "catch_ci95": [
+            0.8970161167131981,
+            0.9350380209572678
+          ],
+          "perfect_rate": 0.484472049689441,
+          "mean_seconds": 8.58952380952381,
+          "mean_catch_seconds": 8.47318448353631,
+          "timeout_rate": 0.0
+        },
+        "Floater": {
+          "episodes": 193,
+          "catch_rate": 0.9430051813471503,
+          "catch_ci95": [
+            0.9008381397805422,
+            0.9678806676260222
+          ],
+          "perfect_rate": 0.09844559585492228,
+          "mean_seconds": 10.450604490500863,
+          "mean_catch_seconds": 10.63598901098901,
+          "timeout_rate": 0.0
+        }
+      },
+      "by_difficulty": {
+        "70-89": {
+          "episodes": 1310,
+          "catch_rate": 0.8580152671755725,
+          "catch_ci95": [
+            0.8380659221993949,
+            0.875870978565507
+          ],
+          "perfect_rate": 0.07862595419847328,
+          "mean_seconds": 11.4064631043257,
+          "mean_catch_seconds": 11.716844602609727,
+          "timeout_rate": 0.0
+        },
+        "40-69": {
+          "episodes": 2342,
+          "catch_rate": 0.9931682322801024,
+          "catch_ci95": [
+            0.9889307888787431,
+            0.9957904301498561
+          ],
+          "perfect_rate": 0.697267292912041,
+          "mean_seconds": 7.103195274693994,
+          "mean_catch_seconds": 7.063320435654915,
+          "timeout_rate": 0.0
+        },
+        "<40": {
+          "episodes": 829,
+          "catch_rate": 1.0,
+          "catch_ci95": [
+            0.9953873581723103,
+            1.0
+          ],
+          "perfect_rate": 0.8890229191797346,
+          "mean_seconds": 5.990028146361078,
+          "mean_catch_seconds": 5.990028146361078,
+          "timeout_rate": 0.0
+        },
+        ">=90": {
+          "episodes": 519,
+          "catch_rate": 0.3236994219653179,
+          "catch_ci95": [
+            0.2848676532272629,
+            0.36512194209185483
+          ],
+          "perfect_rate": 0.0019267822736030828,
+          "mean_seconds": 13.933365446371226,
+          "mean_catch_seconds": 22.706349206349206,
+          "timeout_rate": 0.0
+        }
+      },
+      "controller": "ppo",
+      "steps": 10001216,
+      "model": "C:\\Users\\qq139\\Documents\\ChatGPT\\test\\stardew-autofish\\training\\runs\\20260927_scaling_10m\\best.zip",
+      "seed": 4000000,
+      "weight_sha256": "144eca2ca4e769e5f3c9fa8316b2e33cc22707470141c1355b07a52d8c854495",
+      "selection": "Development catch rate only; no holdout model selection"
+    }
+  },
+  "holdout_paired_comparisons": {
+    "terminal": {
+      "overall": {
+        "episodes": 5000,
+        "gain_pp": 2.52,
+        "gain_ci95_pp": [
+          2.0,
+          3.06
+        ],
+        "improved_episodes": 156,
+        "regressed_episodes": 30,
+        "unchanged_episodes": 4814,
+        "method": "20,000 episode-paired bootstrap draws; does not measure training-seed variability"
+      },
+      "hard": {
+        "episodes": 519,
+        "gain_pp": 7.7071290944123305,
+        "gain_ci95_pp": [
+          5.009633911368015,
+          10.597302504816955
+        ],
+        "improved_episodes": 50,
+        "regressed_episodes": 10,
+        "unchanged_episodes": 459,
+        "method": "20,000 episode-paired bootstrap draws; does not measure training-seed variability"
+      }
+    },
+    "selected": {
+      "overall": {
+        "episodes": 5000,
+        "gain_pp": 2.52,
+        "gain_ci95_pp": [
+          2.0,
+          3.06
+        ],
+        "improved_episodes": 156,
+        "regressed_episodes": 30,
+        "unchanged_episodes": 4814,
+        "method": "20,000 episode-paired bootstrap draws; does not measure training-seed variability"
+      },
+      "hard": {
+        "episodes": 519,
+        "gain_pp": 7.7071290944123305,
+        "gain_ci95_pp": [
+          5.009633911368015,
+          10.597302504816955
+        ],
+        "improved_episodes": 50,
+        "regressed_episodes": 10,
+        "unchanged_episodes": 459,
+        "method": "20,000 episode-paired bootstrap draws; does not measure training-seed variability"
+      }
+    }
+  },
+  "holdout_by_level": [
+    {
+      "level": 0,
+      "start": {
+        "episodes": 469,
+        "catch_rate": 0.7547974413646056
+      },
+      "terminal": {
+        "episodes": 469,
+        "catch_rate": 0.8187633262260128
+      },
+      "selected": {
+        "episodes": 469,
+        "catch_rate": 0.8187633262260128
+      }
+    },
+    {
+      "level": 1,
+      "start": {
+        "episodes": 439,
+        "catch_rate": 0.7790432801822323
+      },
+      "terminal": {
+        "episodes": 439,
+        "catch_rate": 0.8132118451025057
+      },
+      "selected": {
+        "episodes": 439,
+        "catch_rate": 0.8132118451025057
+      }
+    },
+    {
+      "level": 2,
+      "start": {
+        "episodes": 466,
+        "catch_rate": 0.8197424892703863
+      },
+      "terminal": {
+        "episodes": 466,
+        "catch_rate": 0.8454935622317596
+      },
+      "selected": {
+        "episodes": 466,
+        "catch_rate": 0.8454935622317596
+      }
+    },
+    {
+      "level": 3,
+      "start": {
+        "episodes": 439,
+        "catch_rate": 0.8246013667425968
+      },
+      "terminal": {
+        "episodes": 439,
+        "catch_rate": 0.856492027334852
+      },
+      "selected": {
+        "episodes": 439,
+        "catch_rate": 0.856492027334852
+      }
+    },
+    {
+      "level": 4,
+      "start": {
+        "episodes": 449,
+        "catch_rate": 0.8507795100222717
+      },
+      "terminal": {
+        "episodes": 449,
+        "catch_rate": 0.8574610244988864
+      },
+      "selected": {
+        "episodes": 449,
+        "catch_rate": 0.8574610244988864
+      }
+    },
+    {
+      "level": 5,
+      "start": {
+        "episodes": 419,
+        "catch_rate": 0.8782816229116945
+      },
+      "terminal": {
+        "episodes": 419,
+        "catch_rate": 0.8902147971360382
+      },
+      "selected": {
+        "episodes": 419,
+        "catch_rate": 0.8902147971360382
+      }
+    },
+    {
+      "level": 6,
+      "start": {
+        "episodes": 462,
+        "catch_rate": 0.9004329004329005
+      },
+      "terminal": {
+        "episodes": 462,
+        "catch_rate": 0.922077922077922
+      },
+      "selected": {
+        "episodes": 462,
+        "catch_rate": 0.922077922077922
+      }
+    },
+    {
+      "level": 7,
+      "start": {
+        "episodes": 492,
+        "catch_rate": 0.9065040650406504
+      },
+      "terminal": {
+        "episodes": 492,
+        "catch_rate": 0.9227642276422764
+      },
+      "selected": {
+        "episodes": 492,
+        "catch_rate": 0.9227642276422764
+      }
+    },
+    {
+      "level": 8,
+      "start": {
+        "episodes": 464,
+        "catch_rate": 0.9245689655172413
+      },
+      "terminal": {
+        "episodes": 464,
+        "catch_rate": 0.9461206896551724
+      },
+      "selected": {
+        "episodes": 464,
+        "catch_rate": 0.9461206896551724
+      }
+    },
+    {
+      "level": 9,
+      "start": {
+        "episodes": 457,
+        "catch_rate": 0.9387308533916849
+      },
+      "terminal": {
+        "episodes": 457,
+        "catch_rate": 0.9606126914660832
+      },
+      "selected": {
+        "episodes": 457,
+        "catch_rate": 0.9606126914660832
+      }
+    },
+    {
+      "level": 10,
+      "start": {
+        "episodes": 444,
+        "catch_rate": 0.9256756756756757
+      },
+      "terminal": {
+        "episodes": 444,
+        "catch_rate": 0.9459459459459459
+      },
+      "selected": {
+        "episodes": 444,
+        "catch_rate": 0.9459459459459459
+      }
+    }
+  ],
+  "limitations": [
+    "One training seed and one continuation trajectory",
+    "Weights and optimizer resume, but environment trajectories and RNG streams restart; not bitwise continuation",
+    "This measures a fixed existing policy/algorithm and simulator, not a general scaling law",
+    "No vision, actual-game inputs, or latency noise",
+    "Continuation resumes saved weights and optimizer; stochastic streams and unfinished trajectories restart a second time. Discarded decisions are not counted in final model training steps."
+  ],
+  "recovery": {
+    "created_utc": "2026-09-26T18:31:40.9413244Z",
+    "reason": "Windows PermissionError WinError 5 replacing status.json. Added file replacement retries and made telemetry errors nonfatal; no environment, reward, network, sampling, or optimizer changes.",
+    "original_start_steps": 2002944,
+    "resume_steps": 7002944,
+    "failed_observed_steps": 7589888,
+    "discarded_decisions": 586944,
+    "previous_elapsed_seconds": 522.7810000000754,
+    "previous_observed_episodes": 19734,
+    "checkpoint": "checkpoint_007002944.zip",
+    "checkpoint_sha256": "5ABA439C18844D93298FF2828D8C7051645D2586EDFBFCBD9B15950E2C612888",
+    "original_initial_sha256": "9EF410CA538F67CD88F76452289501CAACE5F9CF7E3D392427A2D4F858FEECF5",
+    "patched_train_sha256": "5047FEC21EEFB6CD466B049810974F5D5661D5ECB54D55DF5DD5A93CF07BBCF5",
+    "limitation": "Continuation resumes saved weights and optimizer; stochastic streams and unfinished trajectories restart a second time. Discarded decisions are not counted in final model training steps."
+  },
+  "additional_collected_decisions_including_discarded": 8585216
+}

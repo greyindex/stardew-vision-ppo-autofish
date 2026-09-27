@@ -1,0 +1,64 @@
+{
+  "schema": "fishing-vision-v1",
+  "args": {
+    "assets": "vision_data/assets",
+    "negatives": "vision_data/negatives",
+    "run": "vision_runs/20260927_v1_synthetic",
+    "steps": 6000,
+    "batch_size": 12,
+    "workers": 2,
+    "eval_every": 250,
+    "val_samples": 256,
+    "seed": 92701,
+    "lr": 0.0003,
+    "resume": null,
+    "real_manifest": null
+  },
+  "input": [
+    3,
+    640,
+    192
+  ],
+  "classes": [
+    "background",
+    "fish",
+    "legendary_fish",
+    "bar",
+    "progress",
+    "treasure"
+  ],
+  "rows": [
+    "fish_visual_center",
+    "bar_top",
+    "bar_bottom",
+    "progress_top"
+  ],
+  "presence": [
+    "panel",
+    "fish",
+    "bar",
+    "progress"
+  ],
+  "channels": [
+    16,
+    32,
+    64,
+    96
+  ],
+  "attention_layers": 0,
+  "parameters": 387038,
+  "torch": "2.11.0+cu128",
+  "cuda": "12.8",
+  "gpu": "NVIDIA GeForce RTX 4070 SUPER",
+  "python": "3.12.13",
+  "source_hashes": {
+    "model.py": "4a133a0bcd2ef285d1551d341efba26819ed82959dd3ba354fd5219f92a82987",
+    "synthetic.py": "bad588e1dbefebf9d1347cc98e926cdc9636bda0479d7b0afd69ca6e4d90d55c",
+    "train.py": "7d1e37bd47b71d19c60399a02940fcf7a2c89021a6d5d5011ef670d417d819be",
+    "__init__.py": "acea30cc7fe50ed5068902e41de72590a5fc03b2bd2b71e3dd368f7cb5e73ea2"
+  },
+  "pid": 95452,
+  "label_source": "renderer ground truth + reviewed real annotations only",
+  "real_training": false,
+  "legendary_status": "screenshot-derived prototype; no real legendary validation"
+}

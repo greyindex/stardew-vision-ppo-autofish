@@ -1,0 +1,101 @@
+{
+  "arguments": {
+    "steps": 7997056,
+    "envs": 16,
+    "seed": 42,
+    "threads": 2,
+    "eval_every": 1000000,
+    "eval_episodes": 2000,
+    "eval_seed": 3000000,
+    "eval_at_start": true,
+    "eval_at_end": true,
+    "save_checkpoints": true,
+    "run_dir": "runs/20260927_scaling_10m",
+    "resume": "runs/20260927_ppo_v1/final.zip",
+    "no_curriculum": true
+  },
+  "schema": "geometry-v1",
+  "observation_size": 294,
+  "history": 16,
+  "frame_fields": [
+    "fish_y",
+    "bar_y",
+    "bar_height",
+    "fish_v_est",
+    "bar_v_est",
+    "progress",
+    "progress_delta",
+    "button_commanded",
+    "since_edge",
+    "frame_dt",
+    "fish_seen",
+    "bar_seen",
+    "progress_seen",
+    "image_age",
+    "fish_vel_valid",
+    "bar_vel_valid",
+    "history_valid",
+    "time_left"
+  ],
+  "config_fields": [
+    "level",
+    "tackle_none",
+    "tackle_cork",
+    "tackle_lead",
+    "tackle_trap",
+    "tackle_barbed"
+  ],
+  "python": "3.12.13 (main, Mar 24 2026, 22:57:53) [MSC v.1944 64 bit (AMD64)]",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "packages": {
+    "numpy": "2.5.3",
+    "gymnasium": "1.3.0",
+    "stable-baselines3": "2.9.0",
+    "torch": "2.14.0+cpu"
+  },
+  "source_revision": "506322f56b2ae1975e0c896fe7bccb731e698fac",
+  "training_seed": 42,
+  "development_seed": 3000000,
+  "start_steps": 2002944,
+  "target_steps": 10000000,
+  "device": "cpu",
+  "objective": "catch-only",
+  "policy": "MLP pi=[128,128] vf=[128,128]",
+  "note": "Simulation-only performance; exact geometry, no vision or latency noise. Catalogue and dynamics are Pufferdle reference, not a current-game certification.",
+  "resumptions": [
+    {
+      "arguments": {
+        "steps": 2997056,
+        "envs": 16,
+        "seed": 42,
+        "threads": 2,
+        "eval_every": 1000000,
+        "eval_episodes": 2000,
+        "eval_seed": 3000000,
+        "eval_at_start": false,
+        "eval_at_end": true,
+        "save_checkpoints": true,
+        "run_dir": "runs/20260927_scaling_10m",
+        "resume": "runs/20260927_scaling_10m/checkpoint_007002944.zip",
+        "continue_run": true,
+        "no_curriculum": true
+      },
+      "recovery": {
+        "created_utc": "2026-09-26T18:31:40.9413244Z",
+        "reason": "Windows PermissionError WinError 5 replacing status.json. Added file replacement retries and made telemetry errors nonfatal; no environment, reward, network, sampling, or optimizer changes.",
+        "original_start_steps": 2002944,
+        "resume_steps": 7002944,
+        "failed_observed_steps": 7589888,
+        "discarded_decisions": 586944,
+        "previous_elapsed_seconds": 522.7810000000754,
+        "previous_observed_episodes": 19734,
+        "checkpoint": "checkpoint_007002944.zip",
+        "checkpoint_sha256": "5ABA439C18844D93298FF2828D8C7051645D2586EDFBFCBD9B15950E2C612888",
+        "original_initial_sha256": "9EF410CA538F67CD88F76452289501CAACE5F9CF7E3D392427A2D4F858FEECF5",
+        "patched_train_sha256": "5047FEC21EEFB6CD466B049810974F5D5661D5ECB54D55DF5DD5A93CF07BBCF5",
+        "limitation": "Continuation resumes saved weights and optimizer; stochastic streams and unfinished trajectories restart a second time. Discarded decisions are not counted in final model training steps."
+      },
+      "at": "2026-09-26T18:31:43.699312+00:00"
+    }
+  ]
+}

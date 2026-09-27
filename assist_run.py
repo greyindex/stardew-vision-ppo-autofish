@@ -2,6 +2,7 @@
 미니게임 바가 뜨면 봇이 바를 물고기에 맞춰 제어. 물고기 추적 수정 검증용.
 매 프레임 로깅 + roi_dbg 스냅샷. ESC 종료."""
 import time, ctypes
+from pathlib import Path
 import numpy as np, mss, cv2
 import pydirectinput
 from pynput import keyboard
@@ -11,7 +12,8 @@ pydirectinput.PAUSE = 0; pydirectinput.FAILSAFE = False
 try: ctypes.windll.user32.SetProcessDPIAware()
 except Exception: pass
 
-SCR = r"C:/Users/user/AppData/Local/Temp/claude/V--00-Projects-game-stardew-autofish/e8285e81-5d14-489c-ab5c-060874ba57db/scratchpad/"
+SCR = Path(__file__).resolve().parent / "logs"
+SCR.mkdir(exist_ok=True)
 cfg = load_config()
 mouse = Mouse(); ctrl = BarController(cfg)
 hwnd = find_game_hwnd(cfg.get("game_title", "Stardew"))
@@ -43,7 +45,7 @@ with mss.mss() as sct:
             if fish: cv2.circle(view, (view.shape[1]//2, int(fish["center"])), 7, (0,0,255), 2)
             snap_f += 1
             if snap_n < 12 and snap_f % 12 == 0:
-                cv2.imwrite(SCR + "assist_%02d.png" % snap_n, cv2.resize(view, (view.shape[1]*5, view.shape[0]), interpolation=cv2.INTER_NEAREST))
+                cv2.imwrite(str(SCR / ("assist_%02d.png" % snap_n)), cv2.resize(view, (view.shape[1]*5, view.shape[0]), interpolation=cv2.INTER_NEAREST))
                 snap_n += 1
             if t0 - last > 0.2:
                 fy = int(fish["center"]) if fish else None

@@ -1,0 +1,40 @@
+{
+  "split": "synthetic_validation",
+  "samples": 256,
+  "loss": 3.1146003790199757,
+  "row_error_pixels": {
+    "fish_visual_center": {
+      "mean": 0.2825515446404518,
+      "p95": 0.6693267822265624,
+      "over_12px_fraction": 0.0
+    },
+    "bar_top": {
+      "mean": 0.7559879359914295,
+      "p95": 1.3189010620117188,
+      "over_12px_fraction": 0.009950248756218905
+    },
+    "bar_bottom": {
+      "mean": 0.7490115948577425,
+      "p95": 1.286834716796875,
+      "over_12px_fraction": 0.014925373134328358
+    },
+    "progress_top": {
+      "mean": 0.4554340234783848,
+      "p95": 0.9146575927734374,
+      "over_12px_fraction": 0.0
+    }
+  },
+  "iou": {
+    "background": 0.999741515194354,
+    "fish": 0.9929610215583494,
+    "legendary_fish": 0.9454175915278261,
+    "bar": 0.9957870472253167,
+    "progress": 0.99825224404422,
+    "treasure": 0.9883669241543585
+  },
+  "presence_accuracy": 0.994140625,
+  "negative_panel_false_positives": 0,
+  "negative_panel_samples": 47,
+  "step": 6000,
+  "selection_score": 1.0474300384521484
+}

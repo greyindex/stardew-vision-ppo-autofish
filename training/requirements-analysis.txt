@@ -1,0 +1,2 @@
+# Optional plotting dependency; install after setting up the training environment.
+matplotlib==3.11.2

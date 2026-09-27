@@ -1,0 +1,16 @@
+{
+  "checkpoint_step": 6000,
+  "gpu": "NVIDIA GeForce RTX 4070 SUPER",
+  "batch_size": 1,
+  "repetitions": 200,
+  "warmup": 20,
+  "torch_threads": 2,
+  "torch_amp_fp16": true,
+  "scope": "in-memory decoded 188x600 BGR crop -> letterbox -> H2D -> CNN -> D2H masks, rows and postprocess; excludes capture, whole-screen locator, PPO and mouse I/O; game was not part of the measurement",
+  "ms": {
+    "p50": 4.066099994815886,
+    "p95": 4.734109953278676,
+    "p99": 5.1623099588323385,
+    "max": 14.39819997176528
+  }
+}

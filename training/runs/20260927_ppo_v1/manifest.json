@@ -1,0 +1,59 @@
+{
+  "arguments": {
+    "steps": 2000000,
+    "envs": 16,
+    "seed": 42,
+    "threads": 2,
+    "eval_every": 200000,
+    "eval_episodes": 80,
+    "run_dir": "runs/20260927_ppo_v1",
+    "resume": null,
+    "no_curriculum": false
+  },
+  "schema": "geometry-v1",
+  "observation_size": 294,
+  "history": 16,
+  "frame_fields": [
+    "fish_y",
+    "bar_y",
+    "bar_height",
+    "fish_v_est",
+    "bar_v_est",
+    "progress",
+    "progress_delta",
+    "button_commanded",
+    "since_edge",
+    "frame_dt",
+    "fish_seen",
+    "bar_seen",
+    "progress_seen",
+    "image_age",
+    "fish_vel_valid",
+    "bar_vel_valid",
+    "history_valid",
+    "time_left"
+  ],
+  "config_fields": [
+    "level",
+    "tackle_none",
+    "tackle_cork",
+    "tackle_lead",
+    "tackle_trap",
+    "tackle_barbed"
+  ],
+  "python": "3.12.13 (main, Mar 24 2026, 22:57:53) [MSC v.1944 64 bit (AMD64)]",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "packages": {
+    "numpy": "2.5.3",
+    "gymnasium": "1.3.0",
+    "stable-baselines3": "2.9.0",
+    "torch": "2.14.0+cpu"
+  },
+  "source_revision": "506322f56b2ae1975e0c896fe7bccb731e698fac",
+  "training_seed": 42,
+  "development_seed": 1000000,
+  "device": "cpu",
+  "objective": "catch-only",
+  "policy": "MLP pi=[128,128] vf=[128,128]",
+  "note": "Simulation-only performance; exact geometry, no vision or latency noise. Catalogue and dynamics are Pufferdle reference, not a current-game certification."
+}

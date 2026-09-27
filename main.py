@@ -206,6 +206,41 @@ def find_bar_center_y(mask, min_area=400):
     return {"center": (top + bottom) / 2.0, "top": top, "bottom": bottom, "area": total}
 
 
+def find_bar_geometry(mask, fish, min_area=400):
+    """Find a wide vertical bar without merging the fish or bottom decoration.
+
+    The real bar becomes translucent outside the fish's hitbox. Its expanded
+    color range also includes parts of the fish and the seaweed, so color alone
+    is insufficient. Join separated wide rows only across the detected fish.
+    """
+    height, width = mask.shape
+    occupied = (np.count_nonzero(mask, axis=1) >= max(3, width * 0.45))
+    edges = np.diff(np.r_[0, occupied, 0].astype(np.int16))
+    runs = list(zip(np.flatnonzero(edges == 1), np.flatnonzero(edges == -1)))
+    merged = []
+    for top, bottom in runs:
+        if merged:
+            previous_bottom = merged[-1][1]
+            small_gap = top - previous_bottom <= max(2, round(height * 0.004))
+            fish_gap = (fish is not None and
+                        previous_bottom >= fish["top"] - 2 and
+                        top <= fish["bottom"] + 2 and
+                        top - previous_bottom <= height * 0.08)
+            if small_gap or fish_gap:
+                merged[-1][1] = int(bottom)
+                continue
+        merged.append([int(top), int(bottom)])
+    candidates = []
+    for top, bottom in merged:
+        area = int(np.count_nonzero(mask[top:bottom]))
+        if 0.10 * height <= bottom - top <= 0.55 * height and area >= min_area:
+            candidates.append((area, top, bottom))
+    if not candidates:
+        return None
+    area, top, bottom = max(candidates)
+    return {"center": (top + bottom) / 2.0, "top": top, "bottom": bottom, "area": area}
+
+
 def detect(frame, cfg):
     """트랙 프레임에서 (bar, fish, bar_mask, fish_mask)를 반환.
 
@@ -215,7 +250,6 @@ def detect(frame, cfg):
     """
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     bar_mask = cv2.inRange(hsv, np.array(cfg["bar_hsv_lower"]), np.array(cfg["bar_hsv_upper"]))
-    bar = find_bar_center_y(bar_mask, min_area=int(cfg["bar_min_area"]))
 
     # 물고기: 청록색 표식만 (파란 배경/바닥물은 H가 달라 제외됨)
     fish_mask = cv2.inRange(hsv, np.array(cfg["fish_hsv_lower"]), np.array(cfg["fish_hsv_upper"]))
@@ -228,6 +262,14 @@ def detect(frame, cfg):
     if mb > 0:
         fish_mask[fish_mask.shape[0] - mb:, :] = 0
     fish = find_fish_blob(fish_mask, min_area=int(cfg["fish_min_area"]))
+    if cfg.get("controller") == "ppo":
+        # Saved real-game misses have H=67..80, S=86..113: the old S>=100,
+        # H<=70 mask either lost the bar or cut off its lower half.
+        faded_mask = cv2.inRange(hsv, np.array([33, 60, 70]), np.array([85, 255, 255]))
+        bar_mask = cv2.bitwise_or(bar_mask, faded_mask)
+        bar = find_bar_geometry(bar_mask, fish, min_area=int(cfg["bar_min_area"]))
+    else:
+        bar = find_bar_center_y(bar_mask, min_area=int(cfg["bar_min_area"]))
     return bar, fish, bar_mask, fish_mask
 
 
@@ -440,9 +482,14 @@ class FishingBrain:
 
 # ---------------------------------------------------------------- 캘리브레이션 (CLI)
 
-def _select_roi_fullscreen(title, hint):
+def _select_roi_fullscreen(title, hint, reference_roi=None):
     with mss.mss() as sct:
         mon = sct.monitors[1]
+        if reference_roi:
+            x = reference_roi["left"] + reference_roi["width"] / 2
+            y = reference_roi["top"] + reference_roi["height"] / 2
+            mon = next((m for m in sct.monitors[1:] if m["left"] <= x < m["left"]+m["width"]
+                        and m["top"] <= y < m["top"]+m["height"]), mon)
         img = np.array(sct.grab(mon))[:, :, :3].copy()
     print(hint)
     scale = min(1.0, 1400 / img.shape[1])
@@ -471,9 +518,31 @@ def mode_calibrate():
         print("취소되었습니다.")
         return
     cfg = load_config()
+    if cfg.get("roi") != roi:
+        cfg.pop("progress_roi", None)
     cfg["roi"] = roi
     save_config(cfg)
     print(f"트랙 영역 저장: {roi}")
+
+
+def mode_calibrate_progress():
+    cfg = load_config()
+    print("5 秒后截图：切回游戏，显示钓鱼小游戏。请选择右侧完整进度槽内部，包含空白顶部，不含木框。")
+    for i in range(5, 0, -1):
+        print(f"  {i}...", flush=True)
+        time.sleep(1)
+    roi = _select_roi_fullscreen(
+        "Select FULL Progress Slot - exclude border (Enter=OK, Esc=Cancel)",
+        "请选择完整进度槽，不要只选当前有颜色的部分。", reference_roi=cfg.get("roi"))
+    if roi is None:
+        print("已取消，原选区保持不变。")
+        return
+    if roi["width"] < 2 or roi["height"] < 30:
+        raise ValueError("进度槽选区太小，请重新选择。")
+    cfg = load_config()
+    cfg["progress_roi"] = roi
+    save_config(cfg)
+    print(f"进度槽已保存：{roi}")
 
 
 def mode_calibrate_bite():
@@ -666,6 +735,8 @@ if __name__ == "__main__":
         mode_calibrate()
     elif mode == "calibrate-bite":
         mode_calibrate_bite()
+    elif mode == "calibrate-progress":
+        mode_calibrate_progress()
     elif mode == "tune":
         mode_tune()
     elif mode == "run":

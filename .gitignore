@@ -15,3 +15,16 @@ logs/
 build/
 dist/
 *.spec
+
+# Offline fishing training
+training/.venv/
+training/.reference/
+training/.validation/
+training/runs/
+training/*.log
+training/.server.json
+training/.venv-vision/
+training/vision_data/
+training/vision_runs/
+.wheel-cache/
+vision_gui_config.json

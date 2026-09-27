@@ -1,0 +1,18 @@
+{
+  "repository": "https://github.com/abmasud1214/pufferdle",
+  "revision": "506322f56b2ae1975e0c896fe7bccb731e698fac",
+  "files": {
+    "FishingGame.js": {
+      "url": "https://raw.githubusercontent.com/abmasud1214/pufferdle/506322f56b2ae1975e0c896fe7bccb731e698fac/src/Components/FishingGame.js",
+      "sha256": "66f8b9fec1ad5bb9c870934e1e1338c8a0d27796e2be102758c5466f90902856"
+    },
+    "fishdata.js": {
+      "url": "https://raw.githubusercontent.com/abmasud1214/pufferdle/506322f56b2ae1975e0c896fe7bccb731e698fac/src/fishdata.js",
+      "sha256": "6fa8238b7185e50b7797aa09a4edf693bbeecf34899710bb0cd66fe50ea758c5"
+    },
+    "README.md": {
+      "url": "https://raw.githubusercontent.com/abmasud1214/pufferdle/506322f56b2ae1975e0c896fe7bccb731e698fac/README.md",
+      "sha256": "de6b94ee918c855e583cf2253b0b8e97811d56fbd87d714b1617e4f3bd1abbc9"
+    }
+  }
+}

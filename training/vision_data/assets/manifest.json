@@ -1,0 +1,29 @@
+[
+  {
+    "name": "fish.png",
+    "url": "https://raw.githubusercontent.com/abmasud1214/pufferdle/506322f56b2ae1975e0c896fe7bccb731e698fac/src/Art/fish.png",
+    "sha256": "4c987932dd4d526c7e4a5e82e7ebedbc0d1082f93763c48ad6ecfc78a669934d",
+    "size": [
+      19,
+      19
+    ]
+  },
+  {
+    "name": "fishing_menu.png",
+    "url": "https://raw.githubusercontent.com/abmasud1214/pufferdle/506322f56b2ae1975e0c896fe7bccb731e698fac/src/Art/fishing_menu.png",
+    "sha256": "c5d0d743b998261cd2150eb7cd9968918e62f99f4c89006707cfbd7b421050e1",
+    "size": [
+      94,
+      300
+    ]
+  },
+  {
+    "name": "treasure.png",
+    "url": "https://raw.githubusercontent.com/abmasud1214/pufferdle/506322f56b2ae1975e0c896fe7bccb731e698fac/src/Art/treasure.png",
+    "sha256": "597d0011c7972f88e24079d5c460fd55575e769d8c2f8f41793c3ce8d1b7c7a9",
+    "size": [
+      20,
+      24
+    ]
+  }
+]

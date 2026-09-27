@@ -1,0 +1,28 @@
+{
+  "source": "user-provided gameplay recording; original recording excluded from repository",
+  "use": "local UI state heuristics; not CNN training labels",
+  "assets": [
+    {
+      "file": "power_meter.png",
+      "time_s": 1.2,
+      "screen_rect": [
+        154,
+        852,
+        185,
+        48
+      ],
+      "sha256": "59d4ae55d9260b0bead79d0086f6a5db691ed7ce9fea08f792f4c48f5f3ef729"
+    },
+    {
+      "file": "energy_meter.png",
+      "time_s": 5,
+      "screen_rect": [
+        3786,
+        1814,
+        46,
+        228
+      ],
+      "sha256": "143898bb33bc56c18837f25080bf76486de74989423cefecfe48577e39435b76"
+    }
+  ]
+}

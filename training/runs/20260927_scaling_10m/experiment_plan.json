@@ -1,0 +1,57 @@
+{
+  "created_utc": "2026-09-26T18:18:38.3087849Z",
+  "question": "Does extending the existing PPO training from 2M to 10M total decisions improve capture success with unchanged training settings?",
+  "parent_checkpoint": "runs/20260927_ppo_v1/final.zip",
+  "parent_sha256": "101C4FE2061F0BAEF149B6A65653E7E212C89DA4BA58E9B0A003F4C85343EDCF",
+  "start_steps": 2002944,
+  "target_total_steps": 10000000,
+  "additional_requested_steps": 7997056,
+  "training_seed": 42,
+  "training_stage": "full",
+  "curriculum": "Preserve completed original curriculum. Continue the full stage without stretching or restarting the easy/mixed stages.",
+  "unchanged": [
+    "60 Hz physics",
+    "30 Hz binary hold/release decisions",
+    "55 fish sampled uniformly per episode",
+    "fishing levels 0-10 uniformly, no tackle",
+    "exact geometry with 16-frame history",
+    "actor/critic each [128,128] Tanh",
+    "PPO learning rate 0.0003, all optimizer settings and reward unchanged",
+    "16 environments, 256-step rollout, batch 512, 5 epochs"
+  ],
+  "development": {
+    "primary": "Catch rate",
+    "secondary": [
+      "catch rate by difficulty",
+      "perfect captures per attempt",
+      "mean successful capture duration"
+    ],
+    "episodes": 2000,
+    "seed_start": 3000000,
+    "evaluate": "At the starting checkpoint, each additional 1M decisions, and after the final optimizer update",
+    "selection": "Highest development catch rate; earliest checkpoint wins ties; includes starting checkpoint"
+  },
+  "final_holdout": {
+    "evaluate": [
+      "starting checkpoint",
+      "10M terminal checkpoint",
+      "development-selected checkpoint if distinct"
+    ],
+    "selection": "No model selection from this holdout",
+    "seed_start": 4000000,
+    "episodes": 5000
+  },
+  "limitations": [
+    "One training seed and one continuation trajectory",
+    "Weights and optimizer resume, but environment trajectories and RNG streams restart; not bitwise continuation",
+    "This measures a fixed existing policy/algorithm and simulator, not a general scaling law",
+    "No vision, actual-game inputs, or latency noise"
+  ],
+  "source_hashes": {
+    "fishing_sim/observations.py": "F3B7194D853C28B7F201C124ADB6EF33BB111456D8E04EFA5EB710916996CAF4",
+    "fishing_sim/core.py": "75410779387EB80815B051D884BC20F83E2CDA93981B9D70A652F388346728CA",
+    "fishing_sim/env.py": "CEFBB0413A5E86F73F5975DC36EC189E9E3CC0A43E18872F6E5EED143C9CD93A",
+    "fishing_sim/evaluate.py": "959A1372B659A086496241E7788741EECFDDF1C3131E47EB043530D6ED941641",
+    "fishing_sim/train.py": "8B8607DC2CBA8C3DF2758E0703A1C58273D5BB076F8DE49EF5D5B30314264834"
+  }
+}

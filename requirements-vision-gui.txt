@@ -1,0 +1,8 @@
+# Install into training/.venv-vision; retain its CUDA torch build.
+# uv pip install --python training/.venv-vision/Scripts/python.exe --constraint training/requirements-vision-lock.txt -r requirements-vision-gui.txt
+stable-baselines3==2.9.0
+gymnasium==1.3.0
+mss==10.2.0
+PyDirectInput==1.0.4
+pynput==1.8.2
+soundcard==0.4.6

@@ -1,0 +1,277 @@
+[
+  {
+    "name": "Pufferfish",
+    "difficulty": 80,
+    "behavior": "Floater"
+  },
+  {
+    "name": "Anchovy",
+    "difficulty": 30,
+    "behavior": "Dart"
+  },
+  {
+    "name": "Tuna",
+    "difficulty": 70,
+    "behavior": "Smooth"
+  },
+  {
+    "name": "Sardine",
+    "difficulty": 30,
+    "behavior": "Dart"
+  },
+  {
+    "name": "Bream",
+    "difficulty": 35,
+    "behavior": "Smooth"
+  },
+  {
+    "name": "Largemouth Bass",
+    "difficulty": 50,
+    "behavior": "Mixed"
+  },
+  {
+    "name": "Smallmouth Bass",
+    "difficulty": 28,
+    "behavior": "Mixed"
+  },
+  {
+    "name": "Rainbow Trout",
+    "difficulty": 45,
+    "behavior": "Mixed"
+  },
+  {
+    "name": "Salmon",
+    "difficulty": 50,
+    "behavior": "Mixed"
+  },
+  {
+    "name": "Walleye",
+    "difficulty": 45,
+    "behavior": "Smooth"
+  },
+  {
+    "name": "Perch",
+    "difficulty": 35,
+    "behavior": "Dart"
+  },
+  {
+    "name": "Carp",
+    "difficulty": 15,
+    "behavior": "Mixed"
+  },
+  {
+    "name": "Catfish",
+    "difficulty": 75,
+    "behavior": "Mixed"
+  },
+  {
+    "name": "Pike",
+    "difficulty": 60,
+    "behavior": "Dart"
+  },
+  {
+    "name": "Sunfish",
+    "difficulty": 30,
+    "behavior": "Mixed"
+  },
+  {
+    "name": "Red Mullet",
+    "difficulty": 55,
+    "behavior": "Smooth"
+  },
+  {
+    "name": "Herring",
+    "difficulty": 25,
+    "behavior": "Dart"
+  },
+  {
+    "name": "Eel",
+    "difficulty": 70,
+    "behavior": "Smooth"
+  },
+  {
+    "name": "Octopus",
+    "difficulty": 95,
+    "behavior": "Sinker"
+  },
+  {
+    "name": "Red Snapper",
+    "difficulty": 40,
+    "behavior": "Mixed"
+  },
+  {
+    "name": "Squid",
+    "difficulty": 75,
+    "behavior": "Sinker"
+  },
+  {
+    "name": "Sea Cucumber",
+    "difficulty": 40,
+    "behavior": "Sinker"
+  },
+  {
+    "name": "Super Cucumber",
+    "difficulty": 80,
+    "behavior": "Sinker"
+  },
+  {
+    "name": "Ghostfish",
+    "difficulty": 50,
+    "behavior": "Mixed"
+  },
+  {
+    "name": "Stonefish",
+    "difficulty": 65,
+    "behavior": "Sinker"
+  },
+  {
+    "name": "Ice Pip",
+    "difficulty": 85,
+    "behavior": "Dart"
+  },
+  {
+    "name": "Lava Eel",
+    "difficulty": 90,
+    "behavior": "Mixed"
+  },
+  {
+    "name": "Sandfish",
+    "difficulty": 65,
+    "behavior": "Mixed"
+  },
+  {
+    "name": "Scorpion Carp",
+    "difficulty": 90,
+    "behavior": "Dart"
+  },
+  {
+    "name": "Flounder",
+    "difficulty": 50,
+    "behavior": "Sinker"
+  },
+  {
+    "name": "Midnight Carp",
+    "difficulty": 55,
+    "behavior": "Mixed"
+  },
+  {
+    "name": "Sturgeon",
+    "difficulty": 78,
+    "behavior": "Mixed"
+  },
+  {
+    "name": "Tiger Trout",
+    "difficulty": 60,
+    "behavior": "Dart"
+  },
+  {
+    "name": "Bullhead",
+    "difficulty": 46,
+    "behavior": "Smooth"
+  },
+  {
+    "name": "Tilapia",
+    "difficulty": 50,
+    "behavior": "Mixed"
+  },
+  {
+    "name": "Chub",
+    "difficulty": 35,
+    "behavior": "Dart"
+  },
+  {
+    "name": "Dorado",
+    "difficulty": 78,
+    "behavior": "Mixed"
+  },
+  {
+    "name": "Albacore",
+    "difficulty": 60,
+    "behavior": "Mixed"
+  },
+  {
+    "name": "Shad",
+    "difficulty": 45,
+    "behavior": "Smooth"
+  },
+  {
+    "name": "Lingcod",
+    "difficulty": 85,
+    "behavior": "Mixed"
+  },
+  {
+    "name": "Halibut",
+    "difficulty": 50,
+    "behavior": "Sinker"
+  },
+  {
+    "name": "Woodskip",
+    "difficulty": 50,
+    "behavior": "Mixed"
+  },
+  {
+    "name": "Void Salmon",
+    "difficulty": 80,
+    "behavior": "Mixed"
+  },
+  {
+    "name": "Slimejack",
+    "difficulty": 55,
+    "behavior": "Dart"
+  },
+  {
+    "name": "Stingray",
+    "difficulty": 80,
+    "behavior": "Sinker"
+  },
+  {
+    "name": "Lionfish",
+    "difficulty": 50,
+    "behavior": "Smooth"
+  },
+  {
+    "name": "Blue Discus",
+    "difficulty": 60,
+    "behavior": "Dart"
+  },
+  {
+    "name": "Midnight Squid",
+    "difficulty": 55,
+    "behavior": "Sinker"
+  },
+  {
+    "name": "Spook Fish",
+    "difficulty": 60,
+    "behavior": "Dart"
+  },
+  {
+    "name": "Blobfish",
+    "difficulty": 75,
+    "behavior": "Floater"
+  },
+  {
+    "name": "Crimsonfish",
+    "difficulty": 95,
+    "behavior": "Mixed"
+  },
+  {
+    "name": "Angler",
+    "difficulty": 85,
+    "behavior": "Smooth"
+  },
+  {
+    "name": "Legend",
+    "difficulty": 110,
+    "behavior": "Mixed"
+  },
+  {
+    "name": "Glacierfish",
+    "difficulty": 100,
+    "behavior": "Mixed"
+  },
+  {
+    "name": "Mutant Carp",
+    "difficulty": 80,
+    "behavior": "Dart"
+  }
+]
