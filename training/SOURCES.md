@@ -24,3 +24,7 @@ Coordinate conventions matter: the reference bar occupies y=6..288. Its fish cat
 7. Reference `floaterSinkerAcceleration` is reinitialized inside each update. The ±0.01 per-tick bias is deliberately preserved; this is not silently changed to accumulated acceleration.
 
 There is no claim of equivalence to every Stardew Valley build. The catalog lacks later additions such as Goby. Reference rights are not a blanket redistribution license: the Pufferdle README credits the original minigame code and assets to ConcernedApe, and no explicit project license was visible. This public repository credits those sources without asserting a project-wide license over their code or artwork. Source visibility and numerical parity do not settle rights questions.
+
+## Live audio fingerprint
+
+`auto_assets/bite_signature.npz` contains a 153-by-10 spectral feature matrix derived from a user-provided gameplay recording (`2026-09-28 01-15-38.mkv`, approximately 146.005–146.144 s). It contains no waveform, speech, music track, or video. The original game sound belongs to its respective rights holder. Parameters and the artifact hash are in `auto_assets/bite_signature.json`; the numerical extractor is `training/build_bite_signature.py`. The audio detector uses this fixed sound-effect signature and an adaptive background estimate, not another trained neural network.

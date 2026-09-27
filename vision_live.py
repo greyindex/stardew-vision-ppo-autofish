@@ -38,7 +38,7 @@ DEFAULTS = {
     "ppo_model": "training/runs/20260927_scaling_10m/best.zip",
     "manual_panel": None,
     "full_auto": False,
-    "auto_bite": "visual",
+    "auto_bite": "audio",
 }
 SETTINGS = ROOT / "vision_gui_config.json"
 
@@ -465,7 +465,7 @@ def decode_geometry(prediction, crop, structure, offset, heights,
     scale, tx, ty = prediction["transform"]
     native = {key: float(value * 300 / h) for key, value in prediction["rows"].items()}
     scores = prediction["presence_scores"]
-    sprite_valid = sprite_center is not None and sprite_score >= .94 and 5 <= sprite_center <= 285
+    sprite_valid = sprite_center is not None and sprite_score >= .94 and 5 <= sprite_center <= 288
     use_sprite = sprite_valid and (abs(sprite_center-native["fish_visual_center"]) >= 2
                                    or scores["fish"] < .7)
     fish_center = sprite_center if use_sprite else native["fish_visual_center"]
@@ -479,12 +479,27 @@ def decode_geometry(prediction, crop, structure, offset, heights,
     fish = (mask == 1) | legendary
     bar, progress, treasure = mask == 3, mask == 4, mask == 5
     units = (94 / w / scale) * (300 / h / scale)
+    # A few disconnected pixels on a legendary icon were labelled as progress.
+    # Read the connected fill anchored at the bottom of the right-hand slot;
+    # keep the existing boundary/heatmap checks on that component.
+    progress_raw_area = float(progress.sum()*units)
+    if progress.any():
+        _, labels, stats, _ = cv2.connectedComponentsWithStats(progress.astype(np.uint8))
+        for label in sorted(range(1, len(stats)), key=lambda i: stats[i, cv2.CC_STAT_AREA], reverse=True):
+            if stats[label, cv2.CC_STAT_AREA]*units < 4:
+                break
+            component = labels == label
+            if (abs(float(ny[component].max())-291) <= 5
+                    and np.mean((nx[component] >= 60) & (nx[component] <= 74)) >= .85):
+                progress = component
+                break
     treasure_y = float(np.median(ny[treasure])) if treasure.any() else None
     treasure_near_fish = (treasure_y is not None and treasure.sum()*units >= 15 and
                           (abs(treasure_y - native["fish_visual_center"]) <= 24 or
                            (last_fish_center is not None and abs(treasure_y - last_fish_center) <= 24)))
     evidence = {"fish_area_native": float(fish.sum() * units), "bar_area_native": float(bar.sum() * units),
                 "progress_area_native": float(progress.sum() * units), "structural_score": structure,
+                "progress_discarded_area_native": progress_raw_area-float(progress.sum()*units),
                 "legendary_area_native": float(legendary.sum() * units),
                 "treasure_area_native": float(treasure.sum() * units),
                 "treasure_center_native": treasure_y, "treasure_near_fish": bool(treasure_near_fish),
@@ -500,7 +515,7 @@ def decode_geometry(prediction, crop, structure, offset, heights,
         reason = "鱼图标不可见或分割不足"
     elif require_fish and not sprite_valid and np.mean((nx[fish] >= 28) & (nx[fish] <= 56)) < .85:
         reason = "鱼图标不在钓鱼轨道"
-    elif require_fish and not 5 <= fish_center <= 285:
+    elif require_fish and not 5 <= fish_center <= 288:
         reason = "鱼坐标异常或处于开关动画"
     elif require_fish and not sprite_valid and abs(float(np.median(ny[fish])) - native["fish_visual_center"]) > 7:
         reason = "鱼热图与分割位置不一致"
@@ -718,7 +733,8 @@ class VisionSession:
             self.model_info = {"vision_step": self.vision.step, "ppo_steps": int(self.policy.model.num_timesteps),
                                "gpu": torch.cuda.get_device_name(), "torch": str(torch.__version__),
                                "vision_preprocessing": "raw-rails-gated-canonical-outer-context-v1",
-                               "runtime_adapter": "harvest-popup-idle-v6",
+                               "runtime_adapter": "spectral-bite-primary-v7",
+                               "audio_signature_sha256": hashlib.sha256((ROOT / "auto_assets" / "bite_signature.npz").read_bytes()).hexdigest(),
                                "vision_sha256": hashlib.sha256(absolute(self.config["vision_model"]).read_bytes()).hexdigest(),
                                "ppo_sha256": hashlib.sha256(absolute(self.config["ppo_model"]).read_bytes()).hexdigest()}
             self.ready.set()
@@ -733,7 +749,9 @@ class VisionSession:
                                         "start_panel_layout_guard_v1", "validated_energy_confirmation_v1",
                                         "cast_meter_contrast_v1", "bite_adaptive_core_v1",
                                         "zoom_panel_search_v1", "panel_layout_presence_v1",
-                                        "harvest_popup_gate_v1", "idle_head_region_v1", "recast_idle_confirmation_v1"],
+                                        "harvest_popup_gate_v1", "idle_head_region_v1", "recast_idle_confirmation_v1",
+                                        "spectral_bite_fingerprint_v1", "audio_primary_hook_v1",
+                                        "anchored_progress_component_v1", "fish_bottom_boundary_v1"],
                 "cast_hold_seconds": CAST_HOLD_SECONDS,
                 "geometry_calibration": {"fish_offset_native": self.config["fish_offset_native"],
                                          "level": self.config["level"]},

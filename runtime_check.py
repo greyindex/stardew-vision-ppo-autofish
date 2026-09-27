@@ -48,6 +48,7 @@ def main():
         ROOT / "training/vision_data/assets/fish.png",
         ROOT / "auto_assets/power_meter.png",
         ROOT / "auto_assets/energy_meter.png",
+        ROOT / "auto_assets/bite_signature.npz",
     ]
     missing = [str(path.relative_to(ROOT)) for path in required if not path.is_file()]
     if missing:

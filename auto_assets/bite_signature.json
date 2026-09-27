@@ -1,0 +1,28 @@
+{
+  "schema": "stardew-bite-spectrum-v1",
+  "source": "User-provided gameplay recording 2026-09-28 01-15-38.mkv, audio near 146.0053-146.144 s",
+  "contents": "Spectral feature array only; no waveform, video, speech, or music recording distributed",
+  "features": {
+    "sample_rate": 24000,
+    "fft": 1024,
+    "hop": 256,
+    "bins": [
+      7,
+      160
+    ],
+    "shape": [
+      153,
+      10
+    ],
+    "window_ms": 138.667,
+    "background_ema": 0.99,
+    "spectral_subtraction": 0.9,
+    "amplitude_compression": "square root"
+  },
+  "decision": {
+    "peak_similarity": 0.93,
+    "two_window_support": 0.88,
+    "note": "Similarity thresholds are not accuracy probabilities."
+  },
+  "sha256": "72e519bf5568a094895d093132c78197e35c6afa12acc71333e0bbf8f7df6099"
+}

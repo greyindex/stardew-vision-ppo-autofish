@@ -212,10 +212,11 @@ class AutoFishingCycle:
         self.last_bite_log = self.last_bite_preview = 0.
         self.bite_times = deque(maxlen=30)
         self.audio = None
-        if config.get("auto_bite", "visual_audio") == "visual_audio":
+        self.audio_missing_since = None
+        if config.get("auto_bite", "audio") in ("audio", "visual_audio"):
             from audio_bite import AudioBiteDetector
-            self.audio = AudioBiteDetector({"bite_sound_ratio": 3.5, "bite_sound_floor": .03,
-                                          "bite_refractory": 1.0}, log=session.note)
+            self.audio = AudioBiteDetector({"bite_detector": "signature", "bite_refractory": 1.0},
+                                          log=session.note)
 
     def close(self):
         if self.audio:
@@ -486,9 +487,12 @@ class AutoFishingCycle:
         event = self.audio.consume_event() if self.audio else None
         if event:
             self.pending_audio = event
-        heard = bool(self.pending_audio and 0 <= now-self.pending_audio["time"] <= .30)
+        heard = bool(self.pending_audio and self.pending_audio.get("engine") == "signature"
+                     and 0 <= now-self.pending_audio["time"] <= .30)
         audio_state = self.audio.snapshot() if self.audio else None
-        confirmed = (visible and (self.visual_count >= 2 or heard)
+        sound_primary = self.config.get("auto_bite") == "audio"
+        confirmed = (heard if sound_primary else
+                     visible and (self.visual_count >= 2 or heard)
                      and self.config.get("auto_bite") != "enchanted")
         self.bite_times.append(self.last_capture)
         hz = ((len(self.bite_times)-1) / max(self.bite_times[-1]-self.bite_times[0], 1e-6)
@@ -498,6 +502,7 @@ class AutoFishingCycle:
                   "evidence": evidence, "visual_frames": self.visual_count,
                   "audio": audio_state, "audio_event": event, "audio_recent": heard,
                   "audio_without_visual": bool(event and not visible),
+                  "confirmation_mode": self.config.get("auto_bite"),
                   "confirmed": confirmed, "actual_hz": hz}
         with self.session.ring_lock:
             self.session.bite_ring.append((watch, record))
@@ -512,7 +517,9 @@ class AutoFishingCycle:
                              bite_audio=audio_state, bite_audio_recent=heard)
         if confirmed and self.generation == self.session.generation and self.session.active.is_set():
             if self.session.mouse.set(True, hwnd):
-                self.transition("hook", "头顶新出现 ! + 声音辅助" if heard else "头顶新出现 ! 连续两帧")
+                why = (f"咬钩音效指纹确认（匹配 {self.pending_audio['score']:.3f}）" if sound_primary else
+                       "头顶新出现 ! + 音效指纹" if heard else "头顶新出现 ! 连续两帧")
+                self.transition("hook", why)
                 return True
         return False
 
@@ -559,6 +566,20 @@ class AutoFishingCycle:
             self.fail("游戏窗口尺寸改变，请在新位置重新按 F1")
             return
         elapsed = now-self.entered
+        sound_primary = self.config.get("auto_bite") == "audio"
+        if sound_primary and self.phase in ("arming", "settle", "wait"):
+            if not self.audio or not self.audio.ok:
+                if self.audio_missing_since is None:
+                    self.audio_missing_since = now
+                if now-self.audio_missing_since >= 3.:
+                    detail = self.audio.error if self.audio else "未启动音频采集"
+                    self.fail("音效识别未就绪，请检查默认输出设备和音频连接：" + (detail or "采集未连续运行"))
+                    return
+                if self.phase == "arming":
+                    self.session.publish(status="正在连接音效识别，请稍候", auto_phase="arming")
+                    return
+            else:
+                self.audio_missing_since = None
         if self.phase == "arming":
             if self.world is None:
                 self.world = self.capture(sct, client)
@@ -609,25 +630,27 @@ class AutoFishingCycle:
                 return
             self.finish_cast_if_released()
         elif self.phase == "settle":
-            if elapsed >= .8:
+            if elapsed >= (.15 if sound_primary else .8):
                 watch = self.capture(sct, client, self.watch_rect)
                 # Detect an early bite while the settling animation is ending;
                 # do not learn an already-visible ! as stationary background.
                 if self.poll_bite(watch, hwnd):
                     return
-                if self.wait_pose is None and not self.visual_count:
+                if elapsed >= .8 and self.wait_pose is None and not self.visual_count:
                     self.learn_wait_pose(watch)
                 if elapsed >= 1.8:
                     learned = self.wait_pose is not None
                     if not self.visual_count:
                         learned = self.learn_wait_pose(watch) or learned
-                    if learned:
+                    if sound_primary:
+                        self.transition("wait", "等待咬钩音效；无需头顶感叹号确认")
+                    elif learned:
                         self.transition("wait", "已建立等待姿势；持续检测玩家头顶 !")
                     elif elapsed > 3.5:
                         self.fail("抛竿后没有确认等待姿势，可能未落水")
         elif self.phase == "wait":
             watch = self.capture(sct, client, self.watch_rect)
-            idle, changed = self.observe_pose(watch, now)
+            idle, changed = self.observe_pose(watch, now) if not sound_primary else (False, False)
             if self.poll_bite(watch, hwnd):
                 return
             recent_marker = now-self.last_visual < .60
@@ -636,7 +659,8 @@ class AutoFishingCycle:
             elif changed and elapsed > 1 and not recent_marker:
                 self.transition("resolve", "等待姿势改变，检查直接收获或收竿")
             elif elapsed > 90:
-                self.fail("90 秒内未确认咬钩；请按 F9 保存头顶检测区域，并检查上钩方式")
+                self.fail("90 秒内未听到咬钩音效；请检查游戏音效音量、咬钩音效设置和默认输出设备" if sound_primary else
+                          "90 秒内未确认咬钩；请按 F9 保存头顶检测区域，并检查上钩方式")
         elif self.phase in ("hook", "collect"):
             if elapsed < .065:
                 self.session.mouse.set(True, hwnd)
@@ -688,7 +712,8 @@ class AutoFishingCycle:
                 self.idle_watch = bounds(frame, self.watch_rect).copy()
             self.world = frame
             self.begin_cast(hwnd, client)
-        audio_state = "声音辅助正常" if self.audio and self.audio.ok else "声音不可用，视觉检测中" if self.audio else "纯视觉/附魔"
+        audio_state = ("音效识别正常" if self.audio and self.audio.ok else
+                       "音效识别连接中" if sound_primary else "声音不可用，视觉检测中" if self.audio else "纯视觉/附魔")
         if self.session.active.is_set():
             self.session.publish(auto_phase=self.phase, auto_cast=self.casts, auto_energy=self.energy,
                 status=f"全自动 · 第 {self.casts} 杆 · {self.LABELS[self.phase]} · {audio_state}",

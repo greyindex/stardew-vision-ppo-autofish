@@ -1,6 +1,6 @@
 {
   "source": "user-provided gameplay recording; original recording excluded from repository",
-  "use": "local UI state heuristics; not CNN training labels",
+  "use": "Local UI and audio fingerprints; not CNN training labels",
   "assets": [
     {
       "file": "power_meter.png",
@@ -23,6 +23,12 @@
         228
       ],
       "sha256": "143898bb33bc56c18837f25080bf76486de74989423cefecfe48577e39435b76"
+    },
+    {
+      "file": "bite_signature.npz",
+      "kind": "spectral features; no waveform",
+      "source_metadata": "bite_signature.json",
+      "sha256": "72e519bf5568a094895d093132c78197e35c6afa12acc71333e0bbf8f7df6099"
     }
   ]
 }
