@@ -38,7 +38,7 @@ DEFAULTS = {
     "ppo_model": "training/runs/20260927_scaling_10m/best.zip",
     "manual_panel": None,
     "full_auto": False,
-    "auto_bite": "audio",
+    "auto_bite": "audio_visual",
 }
 SETTINGS = ROOT / "vision_gui_config.json"
 
@@ -733,7 +733,7 @@ class VisionSession:
             self.model_info = {"vision_step": self.vision.step, "ppo_steps": int(self.policy.model.num_timesteps),
                                "gpu": torch.cuda.get_device_name(), "torch": str(torch.__version__),
                                "vision_preprocessing": "raw-rails-gated-canonical-outer-context-v1",
-                               "runtime_adapter": "spectral-bite-primary-v7",
+                               "runtime_adapter": "night-global-bite-v8",
                                "audio_signature_sha256": hashlib.sha256((ROOT / "auto_assets" / "bite_signature.npz").read_bytes()).hexdigest(),
                                "vision_sha256": hashlib.sha256(absolute(self.config["vision_model"]).read_bytes()).hexdigest(),
                                "ppo_sha256": hashlib.sha256(absolute(self.config["ppo_model"]).read_bytes()).hexdigest()}
@@ -751,7 +751,9 @@ class VisionSession:
                                         "zoom_panel_search_v1", "panel_layout_presence_v1",
                                         "harvest_popup_gate_v1", "idle_head_region_v1", "recast_idle_confirmation_v1",
                                         "spectral_bite_fingerprint_v1", "audio_primary_hook_v1",
-                                        "anchored_progress_component_v1", "fish_bottom_boundary_v1"],
+                                        "anchored_progress_component_v1", "fish_bottom_boundary_v1",
+                                        "dynamic_cast_fill_rim_v1", "global_bite_hud_exclusion_v1",
+                                        "anchor_independent_bite_wait_v1", "audio_or_visual_hook_v1"],
                 "cast_hold_seconds": CAST_HOLD_SECONDS,
                 "geometry_calibration": {"fish_offset_native": self.config["fish_offset_native"],
                                          "level": self.config["level"]},

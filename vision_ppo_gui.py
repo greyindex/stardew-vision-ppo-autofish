@@ -23,7 +23,8 @@ LEVELS = ["按绿条长度估计", *map(str, range(21))]
 TACKLES = {"无渔具": "none", "软木塞浮标": "cork", "铅制浮标": "lead",
            "陷阱浮标": "trap", "倒刺钩": "barbed"}
 MODES = {"视觉 + PPO 控制": "control", "只观察（不操作鼠标）": "observe"}
-BITE_MODES = {"音效指纹识别（推荐）": "audio", "视觉确认 + 音效辅助": "visual_audio", "仅视觉 !（无需声音）": "visual",
+BITE_MODES = {"音效或全屏 !（推荐）": "audio_visual", "仅音效指纹识别": "audio",
+              "全屏 ! 确认 + 音效辅助": "visual_audio", "仅全屏 !（无需声音）": "visual",
               "鱼竿自动上钩附魔": "enchanted"}
 
 
@@ -167,7 +168,7 @@ class VisionGUI:
         self.controls.append((widget, "normal"))
         ttk.Label(offset_row, text="原图 px（实机校准 +1）", foreground="#64748b", font=("Microsoft YaHei UI", 9)).pack(side="left", padx=8)
         self.bite = tk.StringVar(value=next(k for k, v in BITE_MODES.items()
-                                          if v == self.config.get("auto_bite", "audio")))
+                                          if v == self.config.get("auto_bite", "audio_visual")))
         ttk.Label(settings, text="全自动上钩方式").grid(row=4, column=0, sticky="w", pady=4)
         widget = ttk.Combobox(settings, textvariable=self.bite, values=list(BITE_MODES), state="readonly", width=27)
         widget.grid(row=4, column=1, sticky="ew", padx=(8, 0), pady=4)
@@ -413,7 +414,8 @@ class VisionGUI:
                   ("bar_bottom", "#f36bff", 30, 55), ("progress_top", "#ffad36", 61, 74))
         if record.get("type") == "bite_frame":
             evidence = record["evidence"]
-            for name, color in (("region", "#ffad36"), ("stem", "#4dff8b"), ("dot", "#4dff8b")):
+            for name, color in (("excluded_region", "#e85454"), ("region", "#ffad36"),
+                                ("stem", "#4dff8b"), ("dot", "#4dff8b")):
                 box = evidence.get(name)
                 if box:
                     x, y, w, h = box
@@ -473,15 +475,17 @@ class VisionGUI:
             bite_text = ""
             if state.get("auto_phase") in ("settle", "wait"):
                 audio = state.get("bite_audio")
-                sound_primary = self.engine.config.get("auto_bite") == "audio"
+                bite_mode = self.engine.config.get("auto_bite")
                 audio_text = ("音频已连接" if audio and audio.get("ok") else
                               "音频连接中" if audio is not None else "纯视觉/附魔")
-                if sound_primary:
+                if bite_mode in ("audio", "audio_visual"):
                     bite_text = (f"\n{audio_text} · 音效匹配 {(audio or {}).get('score', 0):.2f}"
                                  f" / {((audio or {}).get('threshold') or .93):.2f}"
-                                 f" · 音量 {(audio or {}).get('rms', 0):.3f} · 无需感叹号")
+                                 f" · 音量 {(audio or {}).get('rms', 0):.3f}"
+                                 + (f" · 全屏 ! {state.get('bite_visual_frames', 0)} 帧" if bite_mode == "audio_visual"
+                                    else " · 无需感叹号"))
                 else:
-                    bite_text = (f"\n头顶检测 {state.get('bite_hz', 0):.1f} Hz · ! 连续 {state.get('bite_visual_frames', 0)} 帧"
+                    bite_text = (f"\n全屏检测 {state.get('bite_hz', 0):.1f} Hz · ! 连续 {state.get('bite_visual_frames', 0)} 帧"
                                  f" · {audio_text}")
             self.auto_text.set(f"全自动第 {state.get('auto_cast', 0)} 杆 · {phase}{power_text} · 精力 {energy_text}{bite_text}")
         else:
@@ -502,12 +506,15 @@ class VisionGUI:
                                  f"鱼定位：{fish_source} · 素材匹配 {evidence.get('fish_template_score', 0):.2f}"
                                  f" · 宝箱遮挡 {'是' if evidence.get('treasure_near_fish') else '否'}")
         if full_auto and state.get("auto_phase") in ("settle", "wait"):
-            if self.engine.config.get("auto_bite") == "audio":
+            if self.engine.config.get("auto_bite") == "audio_visual":
+                self.timing_text.set("音效指纹或连续两帧全屏 ! 均可独立上钩。\n"
+                                     "已排除右上角任务区；无需先定位玩家。")
+            elif self.engine.config.get("auto_bite") == "audio":
                 self.timing_text.set("音效指纹独立确认上钩；只在等待阶段启用。\n"
                                      "保留游戏音效音量；音乐、环境音无需关闭。")
             else:
-                self.timing_text.set(f"头顶检测：实测 {state.get('bite_hz', 0):.1f} / 目标 30 Hz\n"
-                                     "提竿需要头顶新出现的 !；音效可辅助确认。")
+                self.timing_text.set(f"全屏检测：实测 {state.get('bite_hz', 0):.1f} Hz\n"
+                                     "提竿需要新出现的 !；已排除右上角任务区。")
         if preview is not None:
             self.draw_preview(preview)
         self.root.after(50, self.poll)

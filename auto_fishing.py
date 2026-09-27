@@ -108,7 +108,12 @@ class GaugeReader:
                 return best
         return None
 
-    def locate_power(self, frame, baseline):
+    def locate_power(self, frame, baseline, *, template_fallback=True):
+        dynamic = self.locate_power_fill(frame, baseline)
+        if dynamic is not None:
+            return dynamic
+        if not template_fallback:
+            return None
         def is_new_meter(rect):
             current, previous = bounds(frame, rect), bounds(baseline, rect)
             return (current is not None and previous is not None
@@ -124,6 +129,57 @@ class GaugeReader:
             return None
         fill = self.power_fill(current)
         return (rect, fill) if fill is not None else None
+
+    @staticmethod
+    def locate_power_fill(frame, baseline):
+        """Locate a newly drawn rectangular fill and verify all four rim sides.
+
+        Night lighting clips the red/green channels of the old brown border
+        nearly to zero. Its grayscale template is no longer a valid reference.
+        The fill's geometry, uniform rim and contrast survive that clipping.
+        """
+        shrink = min(1., 1280 / frame.shape[1])
+        small = cv2.resize(frame, None, fx=shrink, fy=shrink, interpolation=cv2.INTER_AREA)
+
+        def fill_mask(image):
+            hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+            return cv2.inRange(hsv, (20, 65, 40), (100, 255, 255))
+
+        _, _, stats, _ = cv2.connectedComponentsWithStats(fill_mask(small))
+        for x, y, w, h, area in stats[1:]:
+            if not (4 <= h <= 50 and 1.2 <= w/h <= 7.2 and area >= .88*w*h):
+                continue
+            # Refine the solid fill at native resolution before inferring the
+            # surrounding meter. Coarse rounding is significant for a 36px bar.
+            pad = max(3, round(2/shrink))
+            x0, y0 = max(0, round(x/shrink)-pad), max(0, round(y/shrink)-pad)
+            patch = frame[y0:round((y+h)/shrink)+pad, x0:round((x+w)/shrink)+pad]
+            _, _, native, _ = cv2.connectedComponentsWithStats(fill_mask(patch))
+            for xx, yy, ww, hh, aa in sorted(native[1:], key=lambda row: -int(row[4]))[:3]:
+                if not (10 <= hh <= 52 and 1.2 <= ww/hh <= 7.2 and aa >= .90*ww*hh):
+                    continue
+                scale = hh / 24.
+                rect = {"left": round(x0+xx-10*scale), "top": round(y0+yy-12*scale),
+                        "width": round(185*scale), "height": round(48*scale)}
+                crop, before = bounds(frame, rect), bounds(baseline, rect)
+                if crop is None or before is None:
+                    continue
+                image = cv2.resize(crop, (185, 48), interpolation=cv2.INTER_AREA).astype(np.float32)
+                prior = cv2.resize(before, (185, 48), interpolation=cv2.INTER_AREA).astype(np.float32)
+                inside = image[14:34, 13:172].mean(0)
+                top, bottom = image[4:8, 13:172].mean(0), image[40:44, 13:172].mean(0)
+                edge = np.minimum(np.abs(inside-top).max(1), np.abs(inside-bottom).max(1))
+                horizontal = float((edge >= 14).mean())
+                uniform = max(float(np.abs(a-np.median(a, axis=0)).mean()) for a in (top, bottom))
+                rims = [image[13:35, 3:7].mean((0, 1)), image[13:35, 178:182].mean((0, 1))]
+                rim_color = np.median(np.concatenate((top, bottom)), axis=0)
+                sides = max(float(np.abs(a-rim_color).max()) for a in rims)
+                novelty = float((np.abs(image[12:36, 10:175]-prior[12:36, 10:175]).max(2) >= 18).mean())
+                if horizontal < .85 or uniform > 14 or sides > 45 or novelty < .70:
+                    continue
+                rect.update(score=horizontal, method="dynamic_fill_rim")
+                return rect, min(1., float(ww/(165*scale)))
+        return None
 
     def power_fill(self, crop):
         if correlation(crop, self.power, self.power_mask) < .85:
@@ -191,6 +247,9 @@ class AutoFishingCycle:
         self.reader = session.gauge_reader
         self.phase, self.entered = "arming", time.perf_counter()
         self.world = None
+        self.screen_bite = None
+        self.screen_wait_set = False
+        self.tried_meter_template = False
         self.power_rect = None
         self.actor_rect = None
         self.watch_rect = None
@@ -208,12 +267,13 @@ class AutoFishingCycle:
         self.visual_count = 0
         self.last_visual = 0.
         self.last_visual_x = None
+        self.last_marker_evidence = None
         self.pending_audio = None
         self.last_bite_log = self.last_bite_preview = 0.
         self.bite_times = deque(maxlen=30)
         self.audio = None
         self.audio_missing_since = None
-        if config.get("auto_bite", "audio") in ("audio", "visual_audio"):
+        if config.get("auto_bite", "audio_visual") in ("audio", "audio_visual", "visual_audio"):
             from audio_bite import AudioBiteDetector
             self.audio = AudioBiteDetector({"bite_detector": "signature", "bite_refractory": 1.0},
                                           log=session.note)
@@ -232,11 +292,16 @@ class AutoFishingCycle:
             self.visual_count = 0
             self.last_visual = 0.
             self.last_visual_x = None
+            self.last_marker_evidence = None
             self.pending_audio = None
             self.bite_times.clear()
             self.wait_pose = self.pose_mask = self.wait_watch = None
             self.harvest_since = None
             self.harvest = {"visible": False}
+            from bite_vision import BiteMarkerReader
+            self.screen_bite = BiteMarkerReader(self.world)
+            self.screen_wait_set = False
+            self.tried_meter_template = False
         self.session._record({"type": "auto_state", "time": self.entered, "state": phase,
                               "cast": self.casts, "reason": why})
         self.session.note(f"[全自动 {self.casts}] {self.LABELS[phase]}：{why}")
@@ -302,21 +367,40 @@ class AutoFishingCycle:
 
     def calibrate_actor(self, rect):
         x, y, w, h = [rect[k] for k in ("left", "top", "width", "height")]
-        self.actor_rect = {"left": round(x+.13*w), "top": round(y+1.55*h),
-                           "width": round(.56*w), "height": round(2.65*h)}
-        self.watch_rect = {"left": max(0, round(x-.2*w)), "top": max(0, round(y-h)),
-                           "width": round(1.5*w), "height": round(5.6*h)}
-        self.watch_rect["width"] = min(self.watch_rect["width"], self.world.shape[1]-self.watch_rect["left"])
-        self.watch_rect["height"] = min(self.watch_rect["height"], self.world.shape[0]-self.watch_rect["top"])
-        self.idle = bounds(self.world, self.actor_rect)
-        if self.idle is None:
-            self.fail("玩家靠近画面边缘，无法建立姿势参考；请调整视野后按 F1")
-            return
-        self.idle = self.idle.copy()
+        actor = {"left": round(x+.13*w), "top": round(y+1.55*h),
+                 "width": round(.56*w), "height": round(2.65*h)}
+        watch = {"left": max(0, round(x-.2*w)), "top": max(0, round(y-h)),
+                 "width": round(1.5*w), "height": round(5.6*h)}
+        watch["width"] = min(watch["width"], self.world.shape[1]-watch["left"])
+        watch["height"] = min(watch["height"], self.world.shape[0]-watch["top"])
+        idle = bounds(self.world, actor)
+        if idle is None or bounds(self.world, watch) is None:
+            return False
+        self.actor_rect, self.watch_rect, self.power_rect = actor, watch, dict(rect)
+        self.idle = idle.copy()
         self.idle_watch = bounds(self.world, self.watch_rect).copy()
         self.wait_pose = self.pose_mask = self.wait_watch = None
+        self.session._record({"type": "auto_player_located", "time": time.perf_counter(),
+                              "cast": self.casts, "power_rect": dict(self.power_rect),
+                              "actor_rect": dict(self.actor_rect), "watch_rect": dict(self.watch_rect),
+                              "source": rect.get("method", "meter_template")})
+        return True
+
+    def recover_actor_from_marker(self, evidence):
+        if self.actor_rect is not None or not evidence["visible"]:
+            return
+        x, y, w, h = evidence["stem"]
+        dx, dy, dw, dh = evidence["dot"]
+        scale = float(np.clip((dy+dh-y)/32., .5, 2.))
+        center = (x+w/2+dx+dw/2)/2
+        rect = {"left": round(center-.42*185*scale), "top": round(dy+dh-1.55*48*scale),
+                "width": round(185*scale), "height": round(48*scale), "method": "confirmed_bite_marker"}
+        if self.calibrate_actor(rect):
+            self.session.note("已从咬钩感叹号恢复玩家区域，继续收获与下一杆")
 
     def observe_pose(self, image, now):
+        if self.actor_rect is None or image is None:
+            return False, False
         relative = {**self.actor_rect, "left": self.actor_rect["left"]-self.watch_rect["left"],
                     "top": self.actor_rect["top"]-self.watch_rect["top"]}
         pose = bounds(image, relative)
@@ -382,6 +466,8 @@ class AutoFishingCycle:
         return {"visible": False}
 
     def learn_wait_pose(self, watch):
+        if self.actor_rect is None or watch is None:
+            return False
         relative = {**self.actor_rect, "left": self.actor_rect["left"]-self.watch_rect["left"],
                     "top": self.actor_rect["top"]-self.watch_rect["top"]}
         pose = bounds(watch, relative)
@@ -396,110 +482,66 @@ class AutoFishingCycle:
         self.idle_since = self.changed_since = None
         return True
 
-    @staticmethod
-    def yellow(image):
-        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-        # Daylight washes out saturation; night tint lowers value. The marker
-        # must also be new relative to the same scene, so this can stay broad.
-        return cv2.inRange(hsv, (10, 55, 55), (53, 255, 255))
-
-    @staticmethod
-    def marker_core(image, mask, meter_height):
-        """Separate a bright ! from its brown outline under local lighting.
-
-        In daylight both the outline and the fill fall inside the broad gold
-        hue range. Split only tall, marker-sized components; keep the original
-        mask as the first detection path for dim or already-separated markers.
-        """
-        value = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)[:, :, 2]
-        _, labels, stats, _ = cv2.connectedComponentsWithStats(mask)
-        core = mask.copy()
-        for label, (x, y, w, h, area) in enumerate(stats[1:], 1):
-            if not (1.7 <= h/max(w, 1) <= 8 and .4*meter_height <= h <= 1.8*meter_height
-                    and area >= 12):
-                continue
-            selected = labels[y:y+h, x:x+w] == label
-            patch = value[y:y+h, x:x+w]
-            levels = patch[selected]
-            low, high = np.percentile(levels, (20, 90))
-            if high-low < 30:
-                continue
-            threshold, _ = cv2.threshold(levels, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            core[y:y+h, x:x+w][selected & (patch <= threshold)] = 0
-        return core
-
-    def bite_evidence(self, watch):
-        baseline = self.wait_watch if self.wait_watch is not None else self.idle_watch
-        difference = np.abs(watch.astype(np.int16) - baseline.astype(np.int16))
-        novel = difference.max(2) >= 18
-        novel_since_cast = np.abs(watch.astype(np.int16) - self.idle_watch.astype(np.int16)).max(2) >= 18
-        mask = self.yellow(watch)
-        # Only this actor's head area is searched, never a global ! template.
-        # Quest/UI icons elsewhere on the screen cannot trigger this detector.
-        rect = self.power_rect
-        cx = rect["left"] + .42*rect["width"] - self.watch_rect["left"]
-        ytop = rect["top"] - .65*rect["height"] - self.watch_rect["top"]
-        ybottom = rect["top"] + 1.5*rect["height"] - self.watch_rect["top"]
-        ys, xs = np.indices(mask.shape)
-        mask[(np.abs(xs-cx) > .21*rect["width"]) | (ys < ytop) | (ys > ybottom)] = 0
-        # Remove stationary yellow scenery before connected components. On a
-        # bright day it otherwise joins the exclamation stem into a wide blob.
-        mask[~novel] = 0
-        evidence = {"visible": False, "region": [max(0, round(cx-.21*rect["width"])),
-                    max(0, round(ytop)), round(.42*rect["width"]), round(ybottom-ytop)],
-                    "stem_candidates": 0, "novel_fraction": 0.,
-                    "baseline": "wait" if self.wait_watch is not None else "pre_cast"}
-        for mode in ("gold", "bright_core"):
-            selected_mask = mask if mode == "gold" else self.marker_core(watch, mask, rect["height"])
-            selected_mask = cv2.morphologyEx(selected_mask, cv2.MORPH_CLOSE, np.ones((2, 2), np.uint8))
-            _, labels, stats, _ = cv2.connectedComponentsWithStats(selected_mask)
-            components = stats[1:]
-            for i, (x, y, w, h, area) in enumerate(components, 1):
-                if not (2.0 <= h/max(w, 1) <= 8 and .22*rect["height"] <= h <= 1.4*rect["height"] and area >= w*h*.45):
-                    continue
-                evidence["stem_candidates"] += 1
-                for j, (xx, yy, ww, hh, aa) in enumerate(components, 1):
-                    if (y+h <= yy <= y+h+max(4, w*2.5) and abs(xx+ww/2-(x+w/2)) <= max(3, w)
-                            and .45*w <= ww <= 2*w and .45*w <= hh <= 1.8*w and aa >= 3):
-                        novel_fraction = min(float(novel_since_cast[labels == i].mean()),
-                                             float(novel_since_cast[labels == j].mean()))
-                        if novel_fraction < .60:
-                            continue
-                        evidence.update(visible=True, stem=list(map(int, (x,y,w,h))),
-                                        dot=list(map(int, (xx,yy,ww,hh))), novel_fraction=novel_fraction,
-                                        mask_mode=mode)
-                        return evidence
-        return evidence
-
-    def poll_bite(self, watch, hwnd):
+    def poll_bite(self, frame, hwnd):
         now = time.perf_counter()
-        evidence = self.bite_evidence(watch)
+        evidence = self.screen_bite.detect(frame)
         visible = evidence["visible"]
         if visible:
             stem = evidence["stem"]
-            center = stem[0] + stem[2]/2
-            continuous = (now-self.last_visual <= .10 and self.last_visual_x is not None
-                          and abs(center-self.last_visual_x) <= self.power_rect["width"]*.08)
+            center = (stem[0]+stem[2]/2, stem[1]+stem[3]/2)
+            continuous = (now-self.last_visual <= .20 and self.last_visual_x is not None
+                          and abs(center[0]-self.last_visual_x[0]) <= max(6, stem[2]*2)
+                          and abs(center[1]-self.last_visual_x[1]) <= max(10, stem[3]))
             self.visual_count = self.visual_count+1 if continuous else 1
             self.last_visual, self.last_visual_x = now, center
+            self.last_marker_evidence = evidence
         else:
             self.visual_count = 0
         event = self.audio.consume_event() if self.audio else None
         if event:
             self.pending_audio = event
+        now = time.perf_counter()
         heard = bool(self.pending_audio and self.pending_audio.get("engine") == "signature"
                      and 0 <= now-self.pending_audio["time"] <= .30)
         audio_state = self.audio.snapshot() if self.audio else None
-        sound_primary = self.config.get("auto_bite") == "audio"
-        confirmed = (heard if sound_primary else
-                     visible and (self.visual_count >= 2 or heard)
-                     and self.config.get("auto_bite") != "enchanted")
+        mode = self.config.get("auto_bite", "audio_visual")
+        visual_confirmed = visible and self.visual_count >= 2
+        confirmed = {"audio": heard, "audio_visual": heard or visual_confirmed,
+                     "visual_audio": visible and (visual_confirmed or heard),
+                     "visual": visual_confirmed, "enchanted": False}[mode]
+        if confirmed and visible:
+            self.recover_actor_from_marker(evidence)
+        elif confirmed and heard and now-self.last_visual <= .35 and self.last_marker_evidence:
+            self.recover_actor_from_marker(self.last_marker_evidence)
+        # Keep full-screen coordinates in the log, but bound diagnostic memory.
+        # Views of a small crop would otherwise retain the entire 4K backing array.
+        preview_rect = self.watch_rect
+        if visible and (preview_rect is None or not
+                        (preview_rect["left"] <= evidence["stem"][0] < preview_rect["left"]+preview_rect["width"]
+                         and preview_rect["top"] <= evidence["stem"][1] < preview_rect["top"]+preview_rect["height"])):
+            x, y, w, h = evidence["region"]
+            preview_rect = {"left": max(0, x-80), "top": max(0, y-40),
+                            "width": min(w+160, frame.shape[1]-max(0, x-80)),
+                            "height": min(h+200, frame.shape[0]-max(0, y-40))}
+        if preview_rect is None:
+            preview_rect = {"left": 0, "top": 0, "width": frame.shape[1], "height": frame.shape[0]}
+        watch = bounds(frame, preview_rect)
+        preview_scale = min(1., 960/watch.shape[1])
+        watch = cv2.resize(watch, None, fx=preview_scale, fy=preview_scale, interpolation=cv2.INTER_AREA)
+        preview_evidence = dict(evidence)
+        for name in ("region", "stem", "dot", "excluded_region"):
+            if name in preview_evidence:
+                x, y, w, h = preview_evidence[name]
+                preview_evidence[name] = [round((x-preview_rect["left"])*preview_scale),
+                                          round((y-preview_rect["top"])*preview_scale),
+                                          round(w*preview_scale), round(h*preview_scale)]
         self.bite_times.append(self.last_capture)
         hz = ((len(self.bite_times)-1) / max(self.bite_times[-1]-self.bite_times[0], 1e-6)
               if len(self.bite_times) > 1 else 0.)
         record = {"type": "bite_frame", "captured": self.last_capture, "time": now,
-                  "cast": self.casts, "phase": self.phase, "watch_rect": dict(self.watch_rect),
-                  "evidence": evidence, "visual_frames": self.visual_count,
+                  "cast": self.casts, "phase": self.phase, "watch_rect": dict(preview_rect),
+                  "evidence": preview_evidence, "screen_evidence": evidence, "preview_scale": preview_scale,
+                  "player_located": self.actor_rect is not None, "visual_frames": self.visual_count,
                   "audio": audio_state, "audio_event": event, "audio_recent": heard,
                   "audio_without_visual": bool(event and not visible),
                   "confirmation_mode": self.config.get("auto_bite"),
@@ -517,8 +559,8 @@ class AutoFishingCycle:
                              bite_audio=audio_state, bite_audio_recent=heard)
         if confirmed and self.generation == self.session.generation and self.session.active.is_set():
             if self.session.mouse.set(True, hwnd):
-                why = (f"咬钩音效指纹确认（匹配 {self.pending_audio['score']:.3f}）" if sound_primary else
-                       "头顶新出现 ! + 音效指纹" if heard else "头顶新出现 ! 连续两帧")
+                why = (f"咬钩音效指纹确认（匹配 {self.pending_audio['score']:.3f}）" if heard and mode in ("audio", "audio_visual") else
+                       "全屏新出现 ! + 音效指纹" if heard else "全屏新出现 ! 连续两帧（已排除右上角任务区）")
                 self.transition("hook", why)
                 return True
         return False
@@ -552,9 +594,11 @@ class AutoFishingCycle:
             released = dict(self.session.mouse.last_release or {})
         if released.get("reason") != "cast_duration_complete":
             self.fail("蓄力输入已被中断")
-        elif self.actor_rect is None:
-            self.fail("已按 1.05 秒松开，但未识别到蓄力条，无法定位玩家")
         else:
+            if self.actor_rect is None:
+                self.session.note("未定位到蓄力条，继续监听咬钩音效与全屏 !；定位不再阻塞上钩")
+                self.session._record({"type": "auto_anchor_missing", "time": time.perf_counter(),
+                                      "cast": self.casts, "action": "continue_bite_listening"})
             self.transition("settle", f"计划 {CAST_HOLD_SECONDS:.2f} 秒，实际按住 {released['held_seconds']:.3f} 秒")
         return True
 
@@ -567,6 +611,7 @@ class AutoFishingCycle:
             return
         elapsed = now-self.entered
         sound_primary = self.config.get("auto_bite") == "audio"
+        sound_enabled = self.config.get("auto_bite") in ("audio", "audio_visual", "visual_audio")
         if sound_primary and self.phase in ("arming", "settle", "wait"):
             if not self.audio or not self.audio.ok:
                 if self.audio_missing_since is None:
@@ -616,42 +661,48 @@ class AutoFishingCycle:
                 return
             # The meter remains a player-position cue only. It never controls
             # the release time; the independent input timer does that.
-            if self.power_rect is None:
+            if self.power_rect is None or self.power_rect.get("method") == "confirmed_bite_marker":
                 frame = self.capture(sct, client)
-                located = self.reader.locate_power(frame, self.world)
+                use_template = elapsed >= .65 and not self.tried_meter_template
+                located = self.reader.locate_power(frame, self.world, template_fallback=use_template)
+                self.tried_meter_template = self.tried_meter_template or use_template
                 if located:
-                    self.power_rect, _ = located
-                    self.calibrate_actor(self.power_rect)
-                    self.session._record({"type": "auto_player_located", "time": time.perf_counter(),
-                                          "cast": self.casts, "power_rect": dict(self.power_rect),
-                                          "actor_rect": dict(self.actor_rect), "watch_rect": dict(self.watch_rect),
-                                          "cast_elapsed": time.perf_counter()-self.cast_started})
+                    self.calibrate_actor(located[0])
             if not self.session.active.is_set() or self.generation != self.session.generation:
                 return
             self.finish_cast_if_released()
         elif self.phase == "settle":
-            if elapsed >= (.15 if sound_primary else .8):
-                watch = self.capture(sct, client, self.watch_rect)
+            if elapsed >= (.15 if sound_enabled else .8):
+                frame = self.capture(sct, client)
+                watch = bounds(frame, self.watch_rect) if self.watch_rect else None
                 # Detect an early bite while the settling animation is ending;
                 # do not learn an already-visible ! as stationary background.
-                if self.poll_bite(watch, hwnd):
+                if self.poll_bite(frame, hwnd):
                     return
                 if elapsed >= .8 and self.wait_pose is None and not self.visual_count:
                     self.learn_wait_pose(watch)
                 if elapsed >= 1.8:
-                    learned = self.wait_pose is not None
                     if not self.visual_count:
-                        learned = self.learn_wait_pose(watch) or learned
+                        self.learn_wait_pose(watch)
+                        if not self.screen_wait_set:
+                            self.screen_bite.set_baseline(frame)
+                            self.screen_wait_set = True
                     if sound_primary:
                         self.transition("wait", "等待咬钩音效；无需头顶感叹号确认")
-                    elif learned:
-                        self.transition("wait", "已建立等待姿势；持续检测玩家头顶 !")
-                    elif elapsed > 3.5:
-                        self.fail("抛竿后没有确认等待姿势，可能未落水")
+                    elif self.config.get("auto_bite") == "audio_visual":
+                        self.transition("wait", "等待音效或全屏新出现 !；玩家姿势不作为上钩前置条件")
+                    elif self.config.get("auto_bite") == "enchanted":
+                        self.transition("wait", "等待鱼竿附魔自动上钩")
+                    else:
+                        self.transition("wait", "检测全屏新出现 !，已排除右上角任务区域")
         elif self.phase == "wait":
-            watch = self.capture(sct, client, self.watch_rect)
-            idle, changed = self.observe_pose(watch, now) if not sound_primary else (False, False)
-            if self.poll_bite(watch, hwnd):
+            frame = self.capture(sct, client)
+            watch = bounds(frame, self.watch_rect) if self.watch_rect else None
+            # Ordinary rods cannot harvest before a hook click. Scenery/lighting
+            # changes in an inferred body box must not cancel their bite wait.
+            idle, changed = (self.observe_pose(watch, now) if self.config.get("auto_bite") == "enchanted"
+                             else (False, False))
+            if self.poll_bite(frame, hwnd):
                 return
             recent_marker = now-self.last_visual < .60
             if idle and elapsed > 1 and not recent_marker:
@@ -660,7 +711,7 @@ class AutoFishingCycle:
                 self.transition("resolve", "等待姿势改变，检查直接收获或收竿")
             elif elapsed > 90:
                 self.fail("90 秒内未听到咬钩音效；请检查游戏音效音量、咬钩音效设置和默认输出设备" if sound_primary else
-                          "90 秒内未确认咬钩；请按 F9 保存头顶检测区域，并检查上钩方式")
+                          "90 秒内未确认咬钩；请按 F9 保存全屏检测证据，并检查上钩方式")
         elif self.phase in ("hook", "collect"):
             if elapsed < .065:
                 self.session.mouse.set(True, hwnd)
@@ -680,6 +731,10 @@ class AutoFishingCycle:
                 self.fail("小游戏仍在但观测持续异常；请按 F9 保存片段")
         elif self.phase == "resolve":
             if now-self.last_panel < .8:
+                return
+            if self.watch_rect is None:
+                if elapsed > 6:
+                    self.fail("本杆已结束，但无法定位收获区域；请调整视野后按 F1，避免误点成短抛竿")
                 return
             watch = self.capture(sct, client, self.watch_rect)
             idle, _ = self.observe_pose(watch, now)
