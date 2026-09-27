@@ -455,7 +455,7 @@ class BackgroundPanelSearch:
 
 
 def decode_geometry(prediction, crop, structure, offset, heights,
-                    sprite_center=None, sprite_score=0., last_fish_center=None):
+                    sprite_center=None, sprite_score=0., last_fish_center=None, require_fish=True):
     """Validate CNN geometry with its semantic mask; no HSV fallback.
 
     Low bar presence scores are shown/logged, but independent spatial evidence
@@ -494,15 +494,15 @@ def decode_geometry(prediction, crop, structure, offset, heights,
     length = geometry["bar_bottom"] - geometry["bar_top"]
     if structure < .965 or scores["panel"] < .85:
         reason = "未确认完整钓鱼面板"
-    elif treasure_near_fish and not sprite_valid and evidence["legendary_area_native"] < 15:
+    elif require_fish and treasure_near_fish and not sprite_valid and evidence["legendary_area_native"] < 15:
         reason = "宝箱遮挡鱼图标"
-    elif not sprite_valid and (scores["fish"] < .7 or evidence["fish_area_native"] < 15):
+    elif require_fish and not sprite_valid and (scores["fish"] < .7 or evidence["fish_area_native"] < 15):
         reason = "鱼图标不可见或分割不足"
-    elif not sprite_valid and np.mean((nx[fish] >= 28) & (nx[fish] <= 56)) < .85:
+    elif require_fish and not sprite_valid and np.mean((nx[fish] >= 28) & (nx[fish] <= 56)) < .85:
         reason = "鱼图标不在钓鱼轨道"
-    elif not 5 <= fish_center <= 285:
+    elif require_fish and not 5 <= fish_center <= 285:
         reason = "鱼坐标异常或处于开关动画"
-    elif not sprite_valid and abs(float(np.median(ny[fish])) - native["fish_visual_center"]) > 7:
+    elif require_fish and not sprite_valid and abs(float(np.median(ny[fish])) - native["fish_visual_center"]) > 7:
         reason = "鱼热图与分割位置不一致"
     elif not (32 <= length <= 151 and 2 <= geometry["bar_top"] and geometry["bar_bottom"] <= 292):
         reason = "绿条边界异常或处于开关动画"
@@ -718,7 +718,7 @@ class VisionSession:
             self.model_info = {"vision_step": self.vision.step, "ppo_steps": int(self.policy.model.num_timesteps),
                                "gpu": torch.cuda.get_device_name(), "torch": str(torch.__version__),
                                "vision_preprocessing": "raw-rails-gated-canonical-outer-context-v1",
-                               "runtime_adapter": "actor-prior-daynight-bite-fish-sprite-v2",
+                               "runtime_adapter": "f1-start-layout-energy-v3",
                                "vision_sha256": hashlib.sha256(absolute(self.config["vision_model"]).read_bytes()).hexdigest(),
                                "ppo_sha256": hashlib.sha256(absolute(self.config["ppo_model"]).read_bytes()).hexdigest()}
             self.ready.set()
@@ -729,7 +729,8 @@ class VisionSession:
                              "real_game_geometry_calibration_v1", "canonical_outer_context_v1",
                              "panel_presence_episode_tracking"],
                 "runtime_refinements": ["actor_panel_prior_v1", "day_night_bite_delta_v1",
-                                        "normal_fish_sprite_crosscheck_v1", "treasure_occlusion_hold_120ms"],
+                                        "normal_fish_sprite_crosscheck_v1", "treasure_occlusion_hold_120ms",
+                                        "start_panel_layout_guard_v1", "validated_energy_confirmation_v1"],
                 "cast_hold_seconds": CAST_HOLD_SECONDS,
                 "geometry_calibration": {"fish_offset_native": self.config["fish_offset_native"],
                                          "level": self.config["level"]},

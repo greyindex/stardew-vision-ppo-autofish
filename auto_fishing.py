@@ -118,19 +118,39 @@ class GaugeReader:
     def energy_fraction(self, frame):
         x0, y0 = round(frame.shape[1] * .85), round(frame.shape[0] * .4)
         right = frame[y0:, x0:]
-        rect = self.locate(right, self.energy, self.energy_mask, (.5, .75, 1., 1.25, 1.5, 2.), .975, 500)
+        def readable_energy(rect):
+            crop = bounds(right, rect)
+            return crop is not None and self.energy_crop_fraction(crop) is not None
+        rect = self.locate(right, self.energy, self.energy_mask, (.5, .75, 1., 1.25, 1.5, 2.),
+                           .975, 500, readable_energy)
         if rect is None:
             return None
         image = bounds(right, rect)
         if image is None:
             return None
+        return self.energy_crop_fraction(image)
+
+    def energy_crop_fraction(self, image):
+        """Read only a verified E gauge; an unreadable fill is not zero energy."""
         image = cv2.resize(image, (46, 228), interpolation=cv2.INTER_AREA)
+        label = cv2.cvtColor(image[7:42, 10:36], cv2.COLOR_BGR2GRAY).astype(np.float32).ravel()
+        reference = cv2.cvtColor(self.energy[7:42, 10:36], cv2.COLOR_BGR2GRAY).astype(np.float32).ravel()
+        label -= label.mean(); reference -= reference.mean()
+        contrast = float(np.dot(label, reference) / max(np.linalg.norm(label)*np.linalg.norm(reference), 1e-8))
+        if contrast < .80:
+            return None
         hsv = cv2.cvtColor(image[52:216, 11:33], cv2.COLOR_BGR2HSV)
         h, s, v = cv2.split(hsv)
-        filled = ((((h <= 85) | (h >= 170)) & (s >= 180) & (v >= 160)).mean(1) > .45)
+        label_value = cv2.cvtColor(image[7:42, 10:36], cv2.COLOR_BGR2HSV)[:, :, 2]
+        min_value = max(40., float(np.percentile(label_value, 90)) * .65)
+        filled = ((((h <= 85) | (h >= 170)) & (s >= 80) & (v >= min_value)).mean(1) > .45)
         if not filled.any():
-            return 0.
+            return None
         if not filled[-4:].any():
+            return None
+        # A filled meter is one bottom-anchored region, not scattered scenery.
+        first = np.flatnonzero(filled)[0]
+        if filled[first:].mean() < .90:
             return None
         return float((len(filled) - np.flatnonzero(filled)[0]) / len(filled))
 
@@ -194,7 +214,17 @@ class AutoFishingCycle:
         if self.audio:
             self.audio.arm(False)
         self.session._record({"type": "auto_stop", "time": time.perf_counter(), "reason": message})
+        self.session.note("全自动已停止：" + message)
         self.session.stop("全自动已停止：" + message)
+
+    def low_energy_confirmed(self, sct, client):
+        if self.energy is None or self.energy > .12:
+            return False
+        first = self.energy
+        self.energy = self.reader.energy_fraction(self.capture(sct, client))
+        self.session._record({"type": "energy_confirmation", "time": time.perf_counter(),
+                              "first": first, "second": self.energy})
+        return self.energy is not None and self.energy <= .12
 
     def should_scan(self):
         # Ordinary rods cannot open a minigame until after our hook click.
@@ -439,16 +469,28 @@ class AutoFishingCycle:
                 self.world = self.capture(sct, client)
                 self.energy = self.reader.energy_fraction(self.world)
                 proposal = self.session.matcher.locate(self.world)
+                check = {"type": "auto_start_check", "time": now, "energy": self.energy,
+                         "proposal": proposal, "active_minigame": False}
                 if proposal is not None:
                     crop = bounds(self.world, proposal)
                     if crop is not None:
+                        from vision_live import decode_geometry
+                        structure = self.session.matcher.score(crop)
                         prediction = self.session.vision.predict([self.session.matcher.inference_crop(crop)])[0]
-                        fish_pixels = np.count_nonzero((prediction["mask"] == 1) | (prediction["mask"] == 2))
-                        if prediction["presence_scores"]["panel"] >= .85 and fish_pixels >= 40:
+                        # Starting a cast must check the complete bar/progress
+                        # layout. Fish-like scenery alone is not a minigame;
+                        # a real panel still counts when its fish is occluded.
+                        _, _, evidence, reason = decode_geometry(prediction, crop, structure,
+                            float(self.config.get("fish_offset_native", 1.)), (), require_fish=False)
+                        check.update(active_minigame=not bool(reason), rejection_reason=reason,
+                                     presence=prediction["presence_scores"], evidence=evidence)
+                        if not reason:
+                            self.session._record(check)
                             self.fail("请在当前小游戏结束、玩家空闲时按 F1")
                             return
+                self.session._record(check)
             if elapsed >= .4:
-                if self.energy is not None and self.energy <= .12:
+                if self.low_energy_confirmed(sct, client):
                     self.fail("精力低于 12%，请先恢复精力")
                 else:
                     self.begin_cast(hwnd, client)
@@ -532,7 +574,7 @@ class AutoFishingCycle:
                 self.fail("出现较大界面变化，请处理菜单/背包后重新按 F1")
                 return
             self.energy = self.reader.energy_fraction(frame)
-            if self.energy is not None and self.energy <= .12:
+            if self.low_energy_confirmed(sct, client):
                 self.fail("精力低于 12%，本轮结束")
                 return
             # Refresh the confirmed idle pose for slow lighting changes.

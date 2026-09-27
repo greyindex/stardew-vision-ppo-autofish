@@ -529,7 +529,7 @@ if __name__ == "__main__":
     kernel.CreateMutexW.restype = ctypes.c_void_p
     handle = kernel.CreateMutexW(None, False, "Local\\StardewVisionPPOGUI")
     if kernel.GetLastError() == 183:
-        ctypes.windll.user32.MessageBoxW(None, "新视觉助手已经打开，请使用现有窗口。", "视觉助手", 0)
+        ctypes.windll.user32.MessageBoxW(None, "视觉助手已经打开。\n如果刚更新了程序，请先关闭现有窗口，再重新启动以加载新版。", "视觉助手", 0)
         sys.exit(0)
     try:
         VisionGUI().run()
