@@ -257,6 +257,7 @@ class AutoFishingCycle:
         self.pose = None
         self.last_pose_time = 0.
         self.last_pose_log = 0.
+        self.last_pose_preview = 0.
         self.idle_since = self.changed_since = None
         self.harvest_since = None
         self.harvest = {"visible": False}
@@ -439,15 +440,27 @@ class AutoFishingCycle:
                                   "overhead_fraction": overhead_fraction, "idle_candidate": bool(idle),
                                   "harvest": self.harvest})
             self.last_pose_log = now
+        if self.phase in ("resolve", "cooldown") and now-self.last_pose_preview >= .10:
+            record = {"type": "harvest_frame", "time": now, "captured": self.last_capture,
+                      "cast": self.casts, "phase": self.phase, "watch_rect": dict(self.watch_rect),
+                      "evidence": dict(self.harvest), "idle_candidate": bool(idle),
+                      "idle_difference": idle_difference, "wait_difference": wait_difference,
+                      "overhead_fraction": overhead_fraction}
+            preview = image.copy()
+            with self.session.ring_lock:
+                self.session.bite_ring.append((preview, record))
+            with self.session.state_lock:
+                self.session.preview = (preview, record)
+            self.last_pose_preview = now
         return (self.idle_since is not None and now-self.idle_since >= .30,
                 self.changed_since is not None and now-self.changed_since >= .70)
 
     def harvest_evidence(self, watch):
         """Require a newly drawn item card above the player before pickup.
 
-        The catch/forage card has a broad pale connected background containing
-        the item frame and text. A moving object, bite marker or cast meter is
-        insufficient; none should produce a short click while the player is idle.
+        The catch/forage card has a broad connected background containing the
+        item frame and text. Night tint can turn that background saturated blue.
+        Require a verified card before clicking; general motion is insufficient.
         """
         height = max(1, self.actor_rect["top"]-self.watch_rect["top"])
         overhead = watch[:height]
@@ -462,8 +475,10 @@ class AutoFishingCycle:
         for x, y, w, h, area in stats[1:]:
             if (w >= .65*width and h >= .55*meter_height and x <= center <= x+w
                     and area >= .45*width*meter_height and area >= .25*w*h):
-                return {"visible": True, "box": list(map(int, (x, y, w, h))), "paper_area": int(area)}
-        return {"visible": False}
+                return {"visible": True, "box": list(map(int, (x, y, w, h))),
+                        "paper_area": int(area), "source": "pale_card"}
+        from harvest_vision import tinted_card
+        return tinted_card(overhead, self.idle_watch[:height], novelty, center, width, meter_height)
 
     def learn_wait_pose(self, watch):
         if self.actor_rect is None or watch is None:

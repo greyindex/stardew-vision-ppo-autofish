@@ -689,7 +689,7 @@ class VisionSession:
                         for i, frame in enumerate(frames):
                             if not cv2.imwrite(str(folder / f"{name}_{i:04d}.png"), frame):
                                 raise OSError("无法保存诊断帧")
-                self.note(f"已保存面板 {len(samples)} 帧、咬钩区域 {len(bite_samples)} 帧与同步日志：{folder}")
+                self.note(f"已保存面板 {len(samples)} 帧、咬钩/收获区域 {len(bite_samples)} 帧与同步日志：{folder}")
             except Exception as exc:
                 self.note(f"保存诊断失败：{exc}")
             finally:
@@ -733,7 +733,7 @@ class VisionSession:
             self.model_info = {"vision_step": self.vision.step, "ppo_steps": int(self.policy.model.num_timesteps),
                                "gpu": torch.cuda.get_device_name(), "torch": str(torch.__version__),
                                "vision_preprocessing": "raw-rails-gated-canonical-outer-context-v1",
-                               "runtime_adapter": "night-global-bite-v8",
+                               "runtime_adapter": "tinted-harvest-v9",
                                "audio_signature_sha256": hashlib.sha256((ROOT / "auto_assets" / "bite_signature.npz").read_bytes()).hexdigest(),
                                "vision_sha256": hashlib.sha256(absolute(self.config["vision_model"]).read_bytes()).hexdigest(),
                                "ppo_sha256": hashlib.sha256(absolute(self.config["ppo_model"]).read_bytes()).hexdigest()}
@@ -753,7 +753,8 @@ class VisionSession:
                                         "spectral_bite_fingerprint_v1", "audio_primary_hook_v1",
                                         "anchored_progress_component_v1", "fish_bottom_boundary_v1",
                                         "dynamic_cast_fill_rim_v1", "global_bite_hud_exclusion_v1",
-                                        "anchor_independent_bite_wait_v1", "audio_or_visual_hook_v1"],
+                                        "anchor_independent_bite_wait_v1", "audio_or_visual_hook_v1",
+                                        "tinted_harvest_card_v1", "harvest_diagnostic_preview_v1"],
                 "cast_hold_seconds": CAST_HOLD_SECONDS,
                 "geometry_calibration": {"fish_offset_native": self.config["fish_offset_native"],
                                          "level": self.config["level"]},

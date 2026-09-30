@@ -412,7 +412,12 @@ class VisionGUI:
         sx, sy = image.width / 94, image.height / 300
         colors = (("fish_visual_center", "#00ffff", 30, 55), ("bar_top", "#f36bff", 30, 55),
                   ("bar_bottom", "#f36bff", 30, 55), ("progress_top", "#ffad36", 61, 74))
-        if record.get("type") == "bite_frame":
+        if record.get("type") == "harvest_frame":
+            box = record["evidence"].get("box")
+            if record["evidence"].get("visible") and box:
+                x, y, w, h = box
+                d.rectangle((x, y, x+w, y+h), outline="#4dff8b", width=2)
+        elif record.get("type") == "bite_frame":
             evidence = record["evidence"]
             for name, color in (("excluded_region", "#e85454"), ("region", "#ffad36"),
                                 ("stem", "#4dff8b"), ("dot", "#4dff8b")):
